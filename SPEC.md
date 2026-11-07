@@ -53,13 +53,13 @@ scontrino → riconoscimento prodotti → storico acquisti → magazzino → vol
 - **`ProductEquivalence`** — `product_a`, `product_b`, `tipo` ∈ {**identico** (stesso prodotto, stessa marca/formato, alias diversi tra catene), **equivalente** (stessa categoria e formato normalizzato, marca diversa: sostituibile senza chiedere), **alternativa** (prodotto diverso che soddisfa lo stesso bisogno: proposto, mai sostituito in automatico)}, origine (regola | umano). Con provenienza.
 - `Offer` — catena, product (nullable se non mappato), `prezzo_confezione`, `prezzo_unitario`, `unità`, `prezzo_barrato`, `sconto_dichiarato`, `validità_da/a`, pagina/volantino di origine. Con provenienza.
 - `Receipt` + `ReceiptLine` — data, catena, totale; riga grezza, quantità, prezzo, sconto riga, product. `ReceiptLine` con provenienza.
-- `InventoryItem` — product, data ultimo acquisto, quantità ultimo acquisto, **`tasso_consumo`** (unità/giorno, nullable), durata stimata, stato `probabilmente_finito` (bool), **`confidenza`** ∈ {bassa, media, alta}, **`livello`** ∈ {0, 1, 2}.
+- `InventoryItem` — product, data ultimo acquisto, quantità ultimo acquisto, **`tasso_consumo`** (unità/giorno, nullable), durata stimata, stato `probabilmente_finito` (bool), **`livello_confidenza`** ∈ {bassa, media, alta}, **`livello`** ∈ {0, 1, 2}.
 - `Job` — coda in Postgres (tipo, payload, stato, tentativi, lease).
 
 Prezzi normalizzati a €/kg, €/L, €/pezzo. Per i prodotti a peso variabile il confronto usa sempre €/kg.
 
 ### 2.2 Magazzino a tre livelli (si sbloccano da soli con i dati)
-| Livello | Condizione | Stima | Confidenza | UI |
+| Livello | Condizione | Stima | `livello_confidenza` | UI |
 |---|---|---|---|---|
 | 0 | 0–1 acquisti del prodotto | stato da durata tipica della categoria | bassa | "stima provvisoria" |
 | 1 | 2–3 acquisti | tasso di consumo = quantità acquistata / intervallo medio di riacquisto → stato + quantità residua stimata | media | quantità mostrata con "≈" |
@@ -69,7 +69,7 @@ Feedback dalla lista: "ne ho ancora" / "è finito prima" corregge il **tasso**, 
 
 ### 2.3 Regole deterministiche
 - **Quantità in lista** = fabbisogno su 2 settimane (dal tasso di consumo o dalla durata tipica) − scorta stimata.
-- **Scorta extra** solo se sconto ≥ X% rispetto alla mediana storica **e** tetto di budget rispettato **e**: `non_deperibile` → sempre ammessa; `durata_stimata` → solo se la stima copre il consumo **con margine del 50%** e confidenza ≥ media; `scadenza_reale` → solo se la scadenza inserita copre il consumo.
+- **Scorta extra** solo se sconto ≥ X% rispetto alla mediana storica **e** tetto di budget rispettato **e**: `non_deperibile` → sempre ammessa; `durata_stimata` → solo se la stima copre il consumo **con margine del 50%** e `livello_confidenza` ≥ media; `scadenza_reale` → solo se la scadenza inserita copre il consumo.
 - **Esclusioni alimentari** (allergie, dieta, motivi religiosi): filtro duro, prima dell'ottimizzazione.
 - **Confronto prezzi tra catene**: sul gruppo *identico + equivalente*; l'*alternativa* appare solo come suggerimento "risparmieresti X scegliendo Y".
 - **Prezzo anomalo** (es. −80% vs mediana) → coda di revisione, mai in lista.
@@ -160,7 +160,7 @@ Golden set congelato nel repo con versione e data, annotato **prima** dell'imple
 | Estrazione scontrini | accuratezza campo per campo; tabella modelli (3 colonne base) con costo e tempo |
 | Estrazione volantini | precision/recall su offerte |
 | Matching | precision/recall/F1; curva precision–soglia; accuracy sul tipo di equivalenza |
-| Magazzino | accuracy su 20 prodotti "finito sì/no", per livello di confidenza |
+| Magazzino | accuracy su 20 prodotti "finito sì/no", per `livello_confidenza` |
 | Forecasting | baseline vs esperimenti: MAE/MASE sul proxy; precision/recall su "torna in offerta" (se i dati bastano) |
 | Carrello | € risparmiati vs "tutto nella catena abituale"; tasso di accettazione righe |
 | Chat | exact-match / tolleranza numerica (SQL); RAGAS solo sulle domande sui volantini |
@@ -242,7 +242,7 @@ Nel README: tabella "costi stimati vs costi reali misurati" a fine progetto, per
 
 Ogni ticket ha una stima in ore; la somma settimanale non supera le 20.
 
-**Percorso demo per i docenti (5 minuti):** foto scontrino → minimizzazione → traccia LangSmith → matching con confidenza e tipo di equivalenza → revisione umana → magazzino con livello e confidenza → grafo con checkpoint → lista approvata con spiegazione e badge "storico insufficiente" dove vero → `workflow_dispatch` del job notturno.
+**Percorso demo per i docenti (5 minuti):** foto scontrino → minimizzazione → traccia LangSmith → matching con confidenza e tipo di equivalenza → revisione umana → magazzino con livello e `livello_confidenza` → grafo con checkpoint → lista approvata con spiegazione e badge "storico insufficiente" dove vero → `workflow_dispatch` del job notturno.
 
 ---
 
