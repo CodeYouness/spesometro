@@ -1,0 +1,8 @@
+# Hook pre-commit del repo (SPEC §4.6: gitleaks pre-commit + push protection su GitHub).
+# Installazione: `uv tool install pre-commit && pre-commit install`
+# Aggiornamento versioni: `pre-commit autoupdate` (mai tag non stabili).
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1 # ultima release stabile al 7/11/2026 (pubblicata il 21/3/2026)
+    hooks:
+      - id: gitleaks
