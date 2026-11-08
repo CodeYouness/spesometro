@@ -4,6 +4,7 @@
 **Autore:** Youness (GitHub: CodeYouness)
 **Contesto:** esame finale, Master part-time AI Engineering (Boolean). Consegna **12 dicembre 2026**; finestra di valutazione 5–12 dicembre.
 **Storia:** grill (Q1–Q46) → revisione ostile (R1–R15) → analisi hosting (v1.1) → verifica fornitori con fonti del 7/11 (v1.2) → **revisione critica finale su 10 punti: modellazione, forecasting, equivalenze, scadenze, provenienza, hosting, backup, NiceGUI, privacy, sostenibilità (v1.3)**. L'appendice A registra cosa è stato smentito; l'appendice B le decisioni prese per raccomandazione e ancora ribaltabili.
+**Volantini passati recuperabili (conteggio dell'8/11):** 14 (Lidl 8, Eurospin 1, Coop 5), sotto la soglia di 20 → ADR 0004, niente backfill.
 
 > Frase guida da ripetere nel README: **l'LLM serve per il linguaggio (estrarre, matchare, spiegare); il codice deterministico prende le decisioni.** Ogni numero mostrato all'utente porta una confidenza e una fonte.
 

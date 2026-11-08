@@ -1,0 +1,5 @@
+# 0004 — Niente backfill dei volantini passati
+
+**Contesto:** soglia fissata l'8/11: backfill solo con almeno 20 volantini passati recuperabili per Lidl, Eurospin e Coop. Conteggio dell'8/11: i siti delle catene pubblicano solo il volantino corrente; DoveConviene e Kaufino tengono al massimo un volantino scaduto; l'unico archivio, cercavolantini.it (399 volantini dopo "Carica altri" fino a esaurimento), ne ha **14 scaduti** (Lidl 8, di cui 6 sotto-volantini della stessa settimana 29/10–04/11; Eurospin 1; Coop 5 di cooperative diverse). Le pagine sono immagini WebP, non PDF. Dettaglio in `.scratch/volantini-passati.md`.
+**Decisione:** nessun backfill. Lo storico prezzi parte dai volantini raccolti da oggi in avanti, uno per uscita e per catena, più lo storico personale degli scontrini.
+**Conseguenze:** per l'esame ci saranno circa 4–5 settimane di volantini reali; la "vera occasione" (§ mediana storica) mostra confidenza bassa finché lo storico è corto, e lo dice. L'account demo usa lo storico sintetico già previsto e dichiarato. Raccolta settimanale da calendarizzare (Lidl ogni settimana; Eurospin e Coop a ogni uscita).
