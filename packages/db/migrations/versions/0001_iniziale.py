@@ -41,6 +41,7 @@ TABELLE = [
 # `security_invoker`: la RLS delle tabelle sottostanti vale anche per chi interroga la vista.
 # La vista non arrotonda al centesimo: solo il tipo `numeric(12, 4)` (come `offer.prezzo_unitario`).
 # Entrano righe `stato <> 'rifiutato'` il cui Product sia assegnato a un gruppo e non rifiutato.
+# Quantità e dimensioni non positive non entrano mai nel database (CHECK): qui nessuna difesa.
 PRICE_OBSERVATION = """
 CREATE VIEW price_observation WITH (security_invoker = true) AS
 SELECT
@@ -63,8 +64,7 @@ JOIN product p ON p.id = rl.product_id
 WHERE rl.stato <> 'rifiutato'
   AND p.stato <> 'rifiutato'
   AND p.group_id IS NOT NULL
-  AND rl.quantita > 0
-  AND (p.unita_di_vendita = 'peso_variabile' OR p.dimensione_base > 0)
+  AND (p.unita_di_vendita = 'peso_variabile' OR p.dimensione_base IS NOT NULL)
 UNION ALL
 SELECT
     o.user_id,
@@ -160,6 +160,7 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_product_group")),
+        sa.UniqueConstraint("user_id", "id", name=op.f("uq_product_group_user_id_id")),
     )
     op.create_table(
         "product",
@@ -197,6 +198,7 @@ def upgrade() -> None:
             " 'frutta_a_guscio']::text[]",
             name=op.f("ck_product_attributi"),
         ),
+        sa.CheckConstraint("dimensione_base > 0", name=op.f("ck_product_dimensione_base_positiva")),
         sa.CheckConstraint(
             "fonte IN ('volantino', 'scontrino', 'umano', 'regola')", name=op.f("ck_product_fonte")
         ),
@@ -214,10 +216,10 @@ def upgrade() -> None:
             "confidenza >= 0 AND confidenza <= 1", name=op.f("ck_product_confidenza")
         ),
         sa.ForeignKeyConstraint(
-            ["group_id"],
-            ["product_group.id"],
+            ["group_id", "user_id"],
+            ["product_group.id", "product_group.user_id"],
             name=op.f("fk_product_group_id_product_group"),
-            ondelete="SET NULL",
+            ondelete="SET NULL (group_id)",
         ),
         sa.ForeignKeyConstraint(
             ["user_id"],
@@ -226,6 +228,7 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_product")),
+        sa.UniqueConstraint("user_id", "id", name=op.f("uq_product_user_id_id")),
     )
     op.create_table(
         "product_alias",
@@ -258,8 +261,8 @@ def upgrade() -> None:
             "confidenza >= 0 AND confidenza <= 1", name=op.f("ck_product_alias_confidenza")
         ),
         sa.ForeignKeyConstraint(
-            ["product_id"],
-            ["product.id"],
+            ["product_id", "user_id"],
+            ["product.id", "product.user_id"],
             name=op.f("fk_product_alias_product_id_product"),
             ondelete="CASCADE",
         ),
@@ -306,14 +309,14 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("group_a <> group_b", name=op.f("ck_group_alternative_gruppi_diversi")),
         sa.ForeignKeyConstraint(
-            ["group_a"],
-            ["product_group.id"],
+            ["group_a", "user_id"],
+            ["product_group.id", "product_group.user_id"],
             name=op.f("fk_group_alternative_group_a_product_group"),
             ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["group_b"],
-            ["product_group.id"],
+            ["group_b", "user_id"],
+            ["product_group.id", "product_group.user_id"],
             name=op.f("fk_group_alternative_group_b_product_group"),
             ondelete="CASCADE",
         ),
@@ -325,7 +328,10 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_group_alternative")),
         sa.UniqueConstraint(
-            "user_id", "group_a", "group_b", name=op.f("uq_group_alternative_user_id")
+            "user_id",
+            "group_a",
+            "group_b",
+            name=op.f("uq_group_alternative_user_id_group_a_group_b"),
         ),
     )
 
@@ -354,7 +360,8 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_flyer")),
-        sa.UniqueConstraint("user_id", "sha256", name=op.f("uq_flyer_user_id")),
+        sa.UniqueConstraint("user_id", "id", name=op.f("uq_flyer_user_id_id")),
+        sa.UniqueConstraint("user_id", "sha256", name=op.f("uq_flyer_user_id_sha256")),
     )
     op.create_table(
         "offer",
@@ -398,16 +405,16 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("confidenza >= 0 AND confidenza <= 1", name=op.f("ck_offer_confidenza")),
         sa.ForeignKeyConstraint(
-            ["flyer_id"],
-            ["flyer.id"],
+            ["flyer_id", "user_id"],
+            ["flyer.id", "flyer.user_id"],
             name=op.f("fk_offer_flyer_id_flyer"),
             ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["product_id"],
-            ["product.id"],
+            ["product_id", "user_id"],
+            ["product.id", "product.user_id"],
             name=op.f("fk_offer_product_id_product"),
-            ondelete="SET NULL",
+            ondelete="SET NULL (product_id)",
         ),
         sa.ForeignKeyConstraint(
             ["user_id"],
@@ -436,8 +443,13 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_receipt")),
+        sa.UniqueConstraint("user_id", "id", name=op.f("uq_receipt_user_id_id")),
         sa.UniqueConstraint(
-            "user_id", "catena", "data_ora", "totale", name=op.f("uq_receipt_user_id")
+            "user_id",
+            "catena",
+            "data_ora",
+            "totale",
+            name=op.f("uq_receipt_user_id_catena_data_ora_totale"),
         ),
     )
     op.create_table(
@@ -462,6 +474,7 @@ def upgrade() -> None:
         ),
         sa.Column("confidenza", sa.Numeric(precision=4, scale=3), nullable=True),
         sa.Column("stato", sa.Text(), server_default=sa.text("'auto'"), nullable=False),
+        sa.CheckConstraint("quantita > 0", name=op.f("ck_receipt_line_quantita_positiva")),
         sa.CheckConstraint(
             "fonte IN ('volantino', 'scontrino', 'umano', 'regola')",
             name=op.f("ck_receipt_line_fonte"),
@@ -473,14 +486,14 @@ def upgrade() -> None:
             "confidenza >= 0 AND confidenza <= 1", name=op.f("ck_receipt_line_confidenza")
         ),
         sa.ForeignKeyConstraint(
-            ["product_id"],
-            ["product.id"],
+            ["product_id", "user_id"],
+            ["product.id", "product.user_id"],
             name=op.f("fk_receipt_line_product_id_product"),
-            ondelete="SET NULL",
+            ondelete="SET NULL (product_id)",
         ),
         sa.ForeignKeyConstraint(
-            ["receipt_id"],
-            ["receipt.id"],
+            ["receipt_id", "user_id"],
+            ["receipt.id", "receipt.user_id"],
             name=op.f("fk_receipt_line_receipt_id_receipt"),
             ondelete="CASCADE",
         ),
@@ -514,8 +527,8 @@ def upgrade() -> None:
             name=op.f("ck_inventory_item_livello_confidenza"),
         ),
         sa.ForeignKeyConstraint(
-            ["group_id"],
-            ["product_group.id"],
+            ["group_id", "user_id"],
+            ["product_group.id", "product_group.user_id"],
             name=op.f("fk_inventory_item_group_id_product_group"),
             ondelete="CASCADE",
         ),
@@ -526,7 +539,7 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_inventory_item")),
-        sa.UniqueConstraint("user_id", "group_id", name=op.f("uq_inventory_item_user_id")),
+        sa.UniqueConstraint("user_id", "group_id", name=op.f("uq_inventory_item_user_id_group_id")),
     )
     op.create_table(
         "job",
@@ -561,4 +574,4 @@ def downgrade() -> None:
     op.execute("DROP VIEW IF EXISTS price_observation")
     for tabella in reversed(TABELLE):
         op.drop_table(tabella)
-    op.execute("DROP EXTENSION IF EXISTS pg_trgm")
+    # `pg_trgm` resta: su Supabase può stare nello schema `extensions` ed essere condivisa.

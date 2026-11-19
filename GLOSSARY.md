@@ -59,7 +59,7 @@ Prezzo di un prodotto in un `Flyer`, con il testo grezzo del volantino, validit�
 _Avoid_: promozione, volantino
 
 **`condizione`**:
-Vincolo a cui vale il prezzo di una `Offer`: `nessuna`, `carta_fedeltà` (anche i prezzi per soci) o `multi_acquisto` (con `quantità_minima`).
+Vincolo a cui vale il prezzo di una `Offer`: `nessuna`, `carta_fedelta` (anche i prezzi per soci) o `multi_acquisto` (con `quantità_minima`).
 
 **`Receipt`**:
 Scontrino d'acquisto di una catena, con data e ora, totale, `impronta` per la deduplica ed `estrazione_grezza`.

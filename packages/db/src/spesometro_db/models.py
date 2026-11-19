@@ -23,7 +23,6 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
-    ForeignKey,
     Index,
     Numeric,
     PrimaryKeyConstraint,
@@ -41,8 +40,15 @@ from spesometro_db.base import (
     Base,
     check_array_in,
     check_in,
+    fk_stesso_utente,
+    unico_utente_id,
     user_id_column,
 )
+
+
+def _uuid_ref(*, nullable: bool = False) -> Mapped[uuid.UUID]:
+    """Colonna UUID che punta a un'altra riga dello stesso utente (vedi `fk_stesso_utente`)."""
+    return mapped_column(UUID(as_uuid=True), nullable=nullable)
 
 
 def _uuid_pk() -> Mapped[uuid.UUID]:
@@ -115,6 +121,7 @@ class ProductGroup(Base):
 
     __tablename__ = "product_group"
     __table_args__ = (
+        unico_utente_id(),
         check_in("unita_base", UnitaBase),
         check_in("tipo_durata", TipoDurata),
     )
@@ -133,9 +140,12 @@ class ProductGroup(Base):
 class Product(Provenienza, Base):
     __tablename__ = "product"
     __table_args__ = (
+        unico_utente_id(),
+        fk_stesso_utente("group_id", "product_group", set_null=True),
         check_in("unita_base", UnitaBase),
         check_in("unita_di_vendita", UnitaDiVendita),
         check_array_in("attributi", Attributo),
+        CheckConstraint("dimensione_base > 0", name="dimensione_base_positiva"),
         *vincoli_provenienza(),
     )
 
@@ -143,9 +153,7 @@ class Product(Provenienza, Base):
     user_id: Mapped[uuid.UUID] = user_id_column()
     nome: Mapped[str] = mapped_column(Text, nullable=False)
     marca: Mapped[str | None] = mapped_column(Text)
-    group_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("product_group.id", ondelete="SET NULL")
-    )
+    group_id: Mapped[uuid.UUID | None] = _uuid_ref(nullable=True)
     unita_di_vendita: Mapped[str] = mapped_column(Text, nullable=False)
     # Dimensione come stampata (unita libera) e normalizzata in `unita_base`.
     dimensione_originale_quantita: Mapped[Decimal | None] = mapped_column(Numeric)
@@ -161,6 +169,7 @@ class Product(Provenienza, Base):
 class ProductAlias(Provenienza, Base):
     __tablename__ = "product_alias"
     __table_args__ = (
+        fk_stesso_utente("product_id", "product"),
         check_in("catena", Catena),
         *vincoli_provenienza(),
         # Una stringa grezza per catena punta a un solo Product valido; i rifiutati restano.
@@ -178,9 +187,7 @@ class ProductAlias(Provenienza, Base):
     user_id: Mapped[uuid.UUID] = user_id_column()
     testo_grezzo: Mapped[str] = mapped_column(Text, nullable=False)
     catena: Mapped[str] = mapped_column(Text, nullable=False)
-    product_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("product.id", ondelete="CASCADE"), nullable=False
-    )
+    product_id: Mapped[uuid.UUID] = _uuid_ref()
 
 
 class GroupAlternative(Provenienza, Base):
@@ -189,18 +196,16 @@ class GroupAlternative(Provenienza, Base):
     __tablename__ = "group_alternative"
     __table_args__ = (
         UniqueConstraint("user_id", "group_a", "group_b"),
+        fk_stesso_utente("group_a", "product_group"),
+        fk_stesso_utente("group_b", "product_group"),
         CheckConstraint("group_a <> group_b", name="gruppi_diversi"),
         *vincoli_provenienza(),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     user_id: Mapped[uuid.UUID] = user_id_column()
-    group_a: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("product_group.id", ondelete="CASCADE"), nullable=False
-    )
-    group_b: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("product_group.id", ondelete="CASCADE"), nullable=False
-    )
+    group_a: Mapped[uuid.UUID] = _uuid_ref()
+    group_b: Mapped[uuid.UUID] = _uuid_ref()
 
 
 class Flyer(Base):
@@ -208,6 +213,7 @@ class Flyer(Base):
 
     __tablename__ = "flyer"
     __table_args__ = (
+        unico_utente_id(),
         UniqueConstraint("user_id", "sha256"),
         check_in("catena", Catena),
         check_in("tipo", TipoVolantino),
@@ -231,6 +237,8 @@ class Flyer(Base):
 class Offer(Provenienza, Base):
     __tablename__ = "offer"
     __table_args__ = (
+        fk_stesso_utente("flyer_id", "flyer"),
+        fk_stesso_utente("product_id", "product", set_null=True),
         check_in("condizione", CondizioneOfferta),
         check_in("unita", UnitaBase),
         *vincoli_provenienza(),
@@ -238,14 +246,10 @@ class Offer(Provenienza, Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     user_id: Mapped[uuid.UUID] = user_id_column()
-    flyer_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("flyer.id", ondelete="CASCADE"), nullable=False
-    )
+    flyer_id: Mapped[uuid.UUID] = _uuid_ref()
     pagina: Mapped[int | None] = mapped_column()
     testo_grezzo: Mapped[str] = mapped_column(Text, nullable=False)
-    product_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("product.id", ondelete="SET NULL")
-    )
+    product_id: Mapped[uuid.UUID | None] = _uuid_ref(nullable=True)
     prezzo_confezione: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     # Prezzo per `unita`; con `multi_acquisto` è quello effettivo a `quantita_minima`.
     prezzo_unitario: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
@@ -266,6 +270,7 @@ class Receipt(Base):
 
     __tablename__ = "receipt"
     __table_args__ = (
+        unico_utente_id(),
         UniqueConstraint("user_id", "catena", "data_ora", "totale"),
         check_in("catena", Catena),
     )
@@ -283,13 +288,16 @@ class ReceiptLine(Provenienza, Base):
     """Riga di scontrino. Il prezzo unitario non si salva: lo calcola la vista."""
 
     __tablename__ = "receipt_line"
-    __table_args__ = (*vincoli_provenienza(),)
+    __table_args__ = (
+        fk_stesso_utente("receipt_id", "receipt"),
+        fk_stesso_utente("product_id", "product", set_null=True),
+        CheckConstraint("quantita > 0", name="quantita_positiva"),
+        *vincoli_provenienza(),
+    )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     user_id: Mapped[uuid.UUID] = user_id_column()
-    receipt_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("receipt.id", ondelete="CASCADE"), nullable=False
-    )
+    receipt_id: Mapped[uuid.UUID] = _uuid_ref()
     testo_grezzo: Mapped[str] = mapped_column(Text, nullable=False)
     # Pezzi o kg (peso variabile).
     quantita: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False)
@@ -298,9 +306,7 @@ class ReceiptLine(Provenienza, Base):
     sconto: Mapped[Decimal] = mapped_column(
         Numeric(10, 2), nullable=False, server_default=text("0")
     )
-    product_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("product.id", ondelete="SET NULL")
-    )
+    product_id: Mapped[uuid.UUID | None] = _uuid_ref(nullable=True)
 
 
 class InventoryItem(Base):
@@ -309,15 +315,14 @@ class InventoryItem(Base):
     __tablename__ = "inventory_item"
     __table_args__ = (
         UniqueConstraint("user_id", "group_id"),
+        fk_stesso_utente("group_id", "product_group"),
         CheckConstraint("livello IN (0, 1, 2)", name="livello"),
         check_in("livello_confidenza", LivelloConfidenza),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     user_id: Mapped[uuid.UUID] = user_id_column()
-    group_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("product_group.id", ondelete="CASCADE"), nullable=False
-    )
+    group_id: Mapped[uuid.UUID] = _uuid_ref()
     data_ultimo_acquisto: Mapped[date | None] = mapped_column(Date)
     # In `unita_base` del gruppo.
     quantita_ultimo_acquisto: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))

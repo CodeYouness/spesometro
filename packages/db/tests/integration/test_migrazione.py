@@ -46,6 +46,11 @@ def test_rls_abilitata_su_ogni_tabella(migrated: Config, sql: Sql) -> None:
     assert senza_rls == [] or senza_rls == ["alembic_version"]
 
 
+def test_downgrade_lascia_pg_trgm(migrated: Config, sql: Sql) -> None:
+    command.downgrade(migrated, "base")
+    assert sql("SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'")
+
+
 def test_pg_trgm_attiva(migrated: Config, sql: Sql) -> None:
     assert sql("SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'")
 
@@ -403,3 +408,131 @@ def test_cancellando_l_utente_spariscono_magazzino_e_job(migrated: Config, sql: 
     sql("DELETE FROM app_user WHERE id = $1", uid)
     assert sql("SELECT 1 FROM inventory_item") == []
     assert sql("SELECT 1 FROM job") == []
+
+
+def _altro_prodotto_e_gruppo(sql: Sql) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
+    a, b = _nuovo_utente(sql), _nuovo_utente(sql)
+    return a, b, _nuovo_gruppo(sql, b), _nuovo_prodotto(sql, b)
+
+
+def test_riga_di_un_utente_non_puo_puntare_al_catalogo_di_un_altro(
+    migrated: Config, sql: Sql
+) -> None:
+    a, b, gruppo_b, prodotto_b = _altro_prodotto_e_gruppo(sql)
+    gruppo_a, fid, rid = _nuovo_gruppo(sql, a), uuid.uuid4(), uuid.uuid4()
+    sql(_FLYER, fid, b, "abc")
+    sql(_RECEIPT, rid, b, "lidl")
+    violazioni = [
+        (
+            "INSERT INTO product (id, user_id, nome, group_id, unita_di_vendita, fonte)"
+            " VALUES ($1, $2, 'x', $3, 'pezzo', 'umano')",
+            (uuid.uuid4(), a, gruppo_b),
+        ),
+        (_ALIAS, (uuid.uuid4(), a, prodotto_b, "auto")),
+        (
+            "INSERT INTO group_alternative (id, user_id, group_a, group_b, fonte)"
+            " VALUES ($1, $2, $3, $4, 'umano')",
+            (uuid.uuid4(), a, gruppo_a, gruppo_b),
+        ),
+        (
+            "INSERT INTO group_alternative (id, user_id, group_a, group_b, fonte)"
+            " VALUES ($1, $2, $3, $4, 'umano')",
+            (uuid.uuid4(), a, gruppo_b, gruppo_a),
+        ),
+        (
+            "INSERT INTO offer (id, user_id, flyer_id, testo_grezzo, fonte)"
+            " VALUES ($1, $2, $3, 'x', 'volantino')",
+            (uuid.uuid4(), a, fid),
+        ),
+        (
+            "INSERT INTO offer (id, user_id, flyer_id, testo_grezzo, product_id, fonte)"
+            " VALUES ($1, $2, $3, 'x', $4, 'volantino')",
+            (uuid.uuid4(), a, _flyer_di(sql, a), prodotto_b),
+        ),
+        (
+            "INSERT INTO receipt_line (id, user_id, receipt_id, testo_grezzo, quantita, prezzo,"
+            " fonte) VALUES ($1, $2, $3, 'x', 1, 1, 'scontrino')",
+            (uuid.uuid4(), a, rid),
+        ),
+        (
+            "INSERT INTO receipt_line (id, user_id, receipt_id, testo_grezzo, quantita, prezzo,"
+            " fonte, product_id) VALUES ($1, $2, $3, 'x', 1, 1, 'scontrino', $4)",
+            (uuid.uuid4(), a, _scontrino_di(sql, a), prodotto_b),
+        ),
+        (_INVENTARIO, (uuid.uuid4(), a, gruppo_b, 1, "alta")),
+    ]
+    for query, args in violazioni:
+        with pytest.raises(asyncpg.ForeignKeyViolationError):
+            sql(query, *args)
+
+
+def _flyer_di(sql: Sql, uid: uuid.UUID) -> uuid.UUID:
+    fid = uuid.uuid4()
+    sql(_FLYER, fid, uid, uuid.uuid4().hex)
+    return fid
+
+
+def _scontrino_di(sql: Sql, uid: uuid.UUID) -> uuid.UUID:
+    rid = uuid.uuid4()
+    sql(_RECEIPT, rid, uid, "lidl")
+    return rid
+
+
+def test_cancellando_gruppo_o_prodotto_si_annulla_solo_il_riferimento(
+    migrated: Config, sql: Sql
+) -> None:
+    uid = _nuovo_utente(sql)
+    gid = _nuovo_gruppo(sql, uid)
+    pid = _nuovo_prodotto(sql, uid, gid)
+    fid, rid = _flyer_di(sql, uid), _scontrino_di(sql, uid)
+    sql(
+        "INSERT INTO offer (id, user_id, flyer_id, testo_grezzo, product_id, fonte)"
+        " VALUES ($1, $2, $3, 'x', $4, 'volantino')",
+        uuid.uuid4(),
+        uid,
+        fid,
+        pid,
+    )
+    sql(
+        "INSERT INTO receipt_line (id, user_id, receipt_id, testo_grezzo, quantita, prezzo, fonte,"
+        " product_id) VALUES ($1, $2, $3, 'x', 1, 1, 'scontrino', $4)",
+        uuid.uuid4(),
+        uid,
+        rid,
+        pid,
+    )
+    sql("DELETE FROM product_group WHERE id = $1", gid)
+    prodotto = sql("SELECT user_id, group_id FROM product WHERE id = $1", pid)[0]
+    assert prodotto["user_id"] == uid
+    assert prodotto["group_id"] is None
+    sql("DELETE FROM product WHERE id = $1", pid)
+    for tabella in ("offer", "receipt_line"):
+        riga = sql(f"SELECT user_id, product_id FROM {tabella}")[0]
+        assert riga["user_id"] == uid
+        assert riga["product_id"] is None
+
+
+def test_quantita_della_riga_non_positiva_respinta(migrated: Config, sql: Sql) -> None:
+    uid = _nuovo_utente(sql)
+    rid = _scontrino_di(sql, uid)
+    ins = (
+        "INSERT INTO receipt_line (id, user_id, receipt_id, testo_grezzo, quantita, prezzo, fonte)"
+        " VALUES ($1, $2, $3, 'x', $4::numeric, 1, 'scontrino')"
+    )
+    for quantita in ("0", "-1"):
+        with pytest.raises(asyncpg.CheckViolationError):
+            sql(ins, uuid.uuid4(), uid, rid, quantita)
+    sql(ins, uuid.uuid4(), uid, rid, "0.250")
+
+
+def test_dimensione_base_non_positiva_respinta_ma_puo_mancare(migrated: Config, sql: Sql) -> None:
+    uid = _nuovo_utente(sql)
+    ins = (
+        "INSERT INTO product (id, user_id, nome, unita_di_vendita, dimensione_base, fonte)"
+        " VALUES ($1, $2, 'x', 'pezzo', $3::numeric, 'umano')"
+    )
+    for dimensione in ("0", "-1"):
+        with pytest.raises(asyncpg.CheckViolationError):
+            sql(ins, uuid.uuid4(), uid, dimensione)
+    sql(ins, uuid.uuid4(), uid, None)
+    sql(ins, uuid.uuid4(), uid, "6")

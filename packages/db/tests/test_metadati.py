@@ -52,9 +52,41 @@ def test_ogni_tabella_ha_user_id_non_nullo_con_cascata_verso_user() -> None:
     for tabella in tabelle:
         colonna = tabella.c.user_id
         assert not colonna.nullable, tabella.name
-        fk = next(iter(colonna.foreign_keys))
-        assert fk.column.table.name == User.__tablename__, tabella.name
+        (fk,) = [
+            f
+            for f in tabella.foreign_key_constraints
+            if f.referred_table.name == User.__tablename__
+        ]
+        assert fk.column_keys == ["user_id"], tabella.name
         assert fk.ondelete == "CASCADE", tabella.name
+
+
+def test_ogni_chiave_esterna_tra_tabelle_utente_include_user_id() -> None:
+    """Una riga dell'utente A non può puntare a una riga dell'utente B (ADR 0014 punto 17)."""
+    viste = 0
+    for tabella in _tabelle_utente():
+        for fk in tabella.foreign_key_constraints:
+            if fk.referred_table.name == User.__tablename__:
+                continue
+            viste += 1
+            assert "user_id" in fk.column_keys, fk.name
+            assert {e.column.name for e in fk.elements} >= {"user_id", "id"}, fk.name
+            assert any(
+                {c.name for c in u.columns} == {"user_id", "id"}
+                for u in fk.referred_table.constraints
+                if isinstance(u, UniqueConstraint)
+            ), fk.name
+    assert viste == 9
+
+
+def test_set_null_annulla_solo_la_colonna_del_riferimento() -> None:
+    for tabella, colonna in (
+        (Product.__table__, "group_id"),
+        (Offer.__table__, "product_id"),
+        (ReceiptLine.__table__, "product_id"),
+    ):
+        (fk,) = [f for f in tabella.foreign_key_constraints if colonna in f.column_keys]
+        assert fk.ondelete == f"SET NULL ({colonna})", tabella.name
 
 
 def test_check_coincidono_con_le_enumerazioni_di_core() -> None:
@@ -232,3 +264,10 @@ def test_lease_del_job_con_fuso_e_quantita_del_magazzino_numeric() -> None:
     for nome in ("quantita_ultimo_acquisto", "tasso_consumo"):
         assert type(InventoryItem.__table__.c[nome].type).__name__ == "Numeric"
     assert InventoryItem.__table__.c.tasso_consumo.nullable
+
+
+def test_check_di_scrittura_su_quantita_e_dimensione() -> None:
+    nomi = {c.name for c in ReceiptLine.__table__.constraints}
+    assert "ck_receipt_line_quantita_positiva" in nomi
+    assert "ck_product_dimensione_base_positiva" in {c.name for c in Product.__table__.constraints}
+    assert Product.__table__.c.dimensione_base.nullable

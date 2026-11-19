@@ -180,6 +180,13 @@ def test_prodotto_senza_gruppo_o_rifiutato_non_compare(migrated: Config, sql: Sq
     assert _osservazioni(sql, uid) == []
 
 
+def test_prodotto_a_pezzo_senza_dimensione_non_compare(migrated: Config, sql: Sql) -> None:
+    uid, gid = _utente_e_gruppo(sql, "L")
+    pid = _prodotto(sql, uid, gid, dimensione_base=None)
+    _riga_scontrino(sql, uid, pid, "1", "5.34")
+    assert _osservazioni(sql, uid) == []
+
+
 def test_offerta_di_un_volantino_catalogo_ha_promo_falso(migrated: Config, sql: Sql) -> None:
     uid, gid = _utente_e_gruppo(sql, "L")
     pid = _prodotto(sql, uid, gid)
