@@ -8,7 +8,7 @@ Allineato alla SPEC v1.4 (9/11). Ordine di dipendenza: 01 → 02, 03, 05, 06 →
 
 | #  | Titolo                                                      | Stima | Stato           | Bloccato da    |
 |----|-------------------------------------------------------------|-------|-----------------|----------------|
-| 01 | Scaffold monorepo e deploy "hello" su Railway EU            | 4 h   | ready-for-agent | —              |
+| 01 | Scaffold monorepo e deploy "hello" su Railway EU            | 4 h   | fatto (19/11)   | —              |
 | 02 | Schema dati v1.4 (gruppi, `Flyer`, provenienza), Alembic    | 3,5 h | ready-for-agent | 01             |
 | 03 | Login lato server con Supabase Auth in NiceGUI              | 1,5 h | ready-for-agent | 01             |
 | 05 | Minimizzazione: ridimensionamento e redazione del JSON      | 1 h   | ready-for-agent | 01             |

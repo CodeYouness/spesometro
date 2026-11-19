@@ -43,6 +43,7 @@ Dettagli in `docs/adr/`.
 - **Matching: alias → trigrammi `pg_trgm` → LLM**; embedding solo se l'eval lo richiede; nessun indice HNSW. → `0010-matching-trigrammi.md`
 - **Operatività ridotta**: backup settimanale del solo schema `public`; VPS dopo la consegna; deploy automatico spento dal 3/12; credenziali demo fuori dal README; nessun dato reale nel repo pubblico, nemmeno nelle cassette. → `0011-operativita-ridotta.md`
 - **`Provider` proprio**, niente `init_chat_model` né LiteLLM. → `0012-provider-proprio.md`
+- **Config Railway in `.railway/railway.ts`** (IaC), non in `railway.json` (deprecato, fine supporto 1/12/2026); variabili `unmanaged`; modifiche con `railway config plan` / `apply`. → `0013-railway-iac.md`
 - **Regola decisionale:** decisione irreversibile = 30 minuti max; tutto il resto = default più semplice + ADR di 3 righe.
 
 ## Convenzioni

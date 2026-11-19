@@ -1,0 +1,8 @@
+{
+  "name": "spesometro-infra",
+  "private": true,
+  "description": "Solo per .railway/railway.ts (Infrastructure as Code di Railway, ADR 0013). Non entra nell'immagine Docker.",
+  "devDependencies": {
+    "railway": "3.17.0"
+  }
+}
