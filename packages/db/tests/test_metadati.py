@@ -2,10 +2,26 @@
 
 import re
 
-from spesometro_core import Attributo, Catena, TipoEsclusione
+from spesometro_core import (
+    Attributo,
+    Catena,
+    Fonte,
+    StatoProvenienza,
+    TipoDurata,
+    TipoEsclusione,
+    UnitaBase,
+    UnitaDiVendita,
+)
 from spesometro_db import Base
-from spesometro_db.models import Exclusion, User
-from sqlalchemy import CheckConstraint, Table, UniqueConstraint
+from spesometro_db.models import (
+    Exclusion,
+    GroupAlternative,
+    Product,
+    ProductAlias,
+    ProductGroup,
+    User,
+)
+from sqlalchemy import CheckConstraint, Index, Table, UniqueConstraint
 
 
 def _tabelle_utente() -> list[Table]:
@@ -56,3 +72,65 @@ def test_preferenze_dell_utente_con_default() -> None:
     assert str(t.c.risparmio_minimo_per_negozio.server_default.arg) == "5"
     assert str(t.c.max_negozi.server_default.arg) == "2"
     assert type(t.c.risparmio_minimo_per_negozio.type).__name__ == "Numeric"
+
+
+COLONNE_PROVENIENZA = {"fonte", "fonte_id", "acquisito_il", "confidenza", "stato"}
+
+
+def test_provenienza_solo_sulle_tabelle_che_la_prevedono() -> None:
+    con = [Product, ProductAlias, GroupAlternative]
+    senza = [User, Exclusion, ProductGroup]
+    for modello in con:
+        t = modello.__table__
+        assert set(t.c.keys()) >= COLONNE_PROVENIENZA, t.name
+        assert not t.c.fonte_id.foreign_keys, t.name
+        assert _valori_check(t, "fonte") == {f.value for f in Fonte}
+        assert _valori_check(t, "stato") == {s.value for s in StatoProvenienza}
+        assert any(
+            isinstance(c, CheckConstraint) and c.name == f"ck_{t.name}_confidenza"
+            for c in t.constraints
+        )
+    for modello in senza:
+        assert not COLONNE_PROVENIENZA & set(modello.__table__.c.keys()), modello.__tablename__
+
+
+def test_check_del_catalogo_coincidono_con_le_enumerazioni_di_core() -> None:
+    gruppo, prodotto = ProductGroup.__table__, Product.__table__
+    assert _valori_check(gruppo, "unita_base") == {u.value for u in UnitaBase}
+    assert _valori_check(gruppo, "tipo_durata") == {t.value for t in TipoDurata}
+    assert _valori_check(prodotto, "unita_base") == {u.value for u in UnitaBase}
+    assert _valori_check(prodotto, "unita_di_vendita") == {u.value for u in UnitaDiVendita}
+    assert _valori_check(prodotto, "attributi") == {a.value for a in Attributo}
+    assert _valori_check(ProductAlias.__table__, "catena") == {c.value for c in Catena}
+
+
+def test_quantita_del_catalogo_sono_numeric() -> None:
+    assert type(ProductGroup.__table__.c.formato_riferimento.type).__name__ == "Numeric"
+    for nome in ("dimensione_originale_quantita", "dimensione_base"):
+        assert type(Product.__table__.c[nome].type).__name__ == "Numeric", nome
+
+
+def test_prodotto_puo_esistere_senza_gruppo() -> None:
+    assert Product.__table__.c.group_id.nullable
+
+
+def test_alias_unico_per_catena_e_stringa_tra_le_righe_non_rifiutate() -> None:
+    indici = [i for i in ProductAlias.__table__.indexes if isinstance(i, Index) and i.unique]
+    assert len(indici) == 1
+    indice = indici[0]
+    assert [c.name for c in indice.columns] == ["user_id", "catena", "testo_grezzo"]
+    assert "rifiutato" in str(indice.dialect_options["postgresql"]["where"])
+
+
+def test_alternativa_orientata_unica_e_mai_con_se_stessa() -> None:
+    t = GroupAlternative.__table__
+    unici = [[c.name for c in u.columns] for u in t.constraints if isinstance(u, UniqueConstraint)]
+    assert ["user_id", "group_a", "group_b"] in unici
+    assert any(
+        isinstance(c, CheckConstraint) and c.name == "ck_group_alternative_gruppi_diversi"
+        for c in t.constraints
+    )
+
+
+def test_nessuna_tabella_di_equivalenze() -> None:
+    assert not [n for n in Base.metadata.tables if "equivalen" in n]

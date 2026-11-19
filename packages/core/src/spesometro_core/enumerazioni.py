@@ -26,3 +26,35 @@ class Attributo(StrEnum):
 class TipoEsclusione(StrEnum):
     ALLERGIA = "allergia"
     DIETA = "dieta"
+
+
+class UnitaBase(StrEnum):
+    KG = "kg"
+    L = "L"
+    PEZZO = "pezzo"
+
+
+class UnitaDiVendita(StrEnum):
+    PEZZO = "pezzo"
+    PESO_VARIABILE = "peso_variabile"
+
+
+class TipoDurata(StrEnum):
+    SCADENZA_REALE = "scadenza_reale"
+    DURATA_STIMATA = "durata_stimata"
+    NON_DEPERIBILE = "non_deperibile"
+
+
+class Fonte(StrEnum):
+    """Origine di un dato estratto o dedotto (provenienza)."""
+
+    VOLANTINO = "volantino"
+    SCONTRINO = "scontrino"
+    UMANO = "umano"
+    REGOLA = "regola"
+
+
+class StatoProvenienza(StrEnum):
+    AUTO = "auto"
+    RIVISTO = "rivisto"
+    RIFIUTATO = "rifiutato"
