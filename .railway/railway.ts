@@ -5,7 +5,8 @@ import { defineRailway, github, project, service } from "railway/iac";
 export const partial = "spesometro";
 export default defineRailway(() => {
   const spesometro = service("spesometro", {
-    source: github("CodeYouness/spesometro"),
+    // Branch dichiarato per chiarezza: è già il default del servizio.
+    source: github("CodeYouness/spesometro", { branch: "main" }),
     build: { buildEnvironment: "V3", builder: "DOCKERFILE", dockerfilePath: "docker/Dockerfile" },
     healthcheck: "/health",
     healthcheckTimeout: 60,
