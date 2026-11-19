@@ -7,6 +7,8 @@ from spesometro_core import (
     Catena,
     CondizioneOfferta,
     Fonte,
+    LivelloConfidenza,
+    StatoJob,
     StatoProvenienza,
     TipoDurata,
     TipoEsclusione,
@@ -19,6 +21,8 @@ from spesometro_db.models import (
     Exclusion,
     Flyer,
     GroupAlternative,
+    InventoryItem,
+    Job,
     Offer,
     Product,
     ProductAlias,
@@ -191,3 +195,40 @@ def test_righe_figlie_cadono_con_la_sorgente_e_il_prodotto_resta_opzionale() -> 
         assert not tabella.c[colonna].nullable
     assert Offer.__table__.c.product_id.nullable
     assert ReceiptLine.__table__.c.product_id.nullable
+
+
+def test_check_di_magazzino_e_coda_coincidono_con_le_enumerazioni_di_core() -> None:
+    assert _valori_check(InventoryItem.__table__, "livello_confidenza") == {
+        c.value for c in LivelloConfidenza
+    }
+    assert _valori_check(Job.__table__, "stato") == {s.value for s in StatoJob}
+    check = next(
+        c
+        for c in InventoryItem.__table__.constraints
+        if isinstance(c, CheckConstraint) and c.name == "ck_inventory_item_livello"
+    )
+    assert set(re.findall(r"\d+", str(check.sqltext))) == {"0", "1", "2"}
+
+
+def test_magazzino_punta_al_gruppo_mai_al_prodotto_ed_e_unico_per_gruppo() -> None:
+    tabella = InventoryItem.__table__
+    bersagli = {fk.column.table.name for fk in tabella.foreign_keys}
+    assert ProductGroup.__tablename__ in bersagli
+    assert Product.__tablename__ not in bersagli
+    unici = [
+        [c.name for c in u.columns] for u in tabella.constraints if isinstance(u, UniqueConstraint)
+    ]
+    assert ["user_id", "group_id"] in unici
+
+
+def test_magazzino_e_coda_senza_provenienza() -> None:
+    for tabella in (InventoryItem.__table__, Job.__table__):
+        assert not {"fonte", "fonte_id", "acquisito_il", "confidenza"} & set(tabella.c.keys())
+
+
+def test_lease_del_job_con_fuso_e_quantita_del_magazzino_numeric() -> None:
+    assert Job.__table__.c.lease_scade_il.type.timezone is True
+    assert type(Job.__table__.c.payload.type).__name__ == "JSONB"
+    for nome in ("quantita_ultimo_acquisto", "tasso_consumo"):
+        assert type(InventoryItem.__table__.c[nome].type).__name__ == "Numeric"
+    assert InventoryItem.__table__.c.tasso_consumo.nullable

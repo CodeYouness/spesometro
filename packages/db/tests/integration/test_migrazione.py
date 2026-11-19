@@ -327,3 +327,79 @@ def test_cancellando_volantino_e_scontrino_spariscono_le_righe_ma_non_il_prodott
     assert sql("SELECT 1 FROM offer") == []
     assert sql("SELECT 1 FROM receipt_line") == []
     assert sql("SELECT 1 FROM product WHERE id = $1", pid)
+
+
+_INVENTARIO = (
+    "INSERT INTO inventory_item (id, user_id, group_id, livello, livello_confidenza)"
+    " VALUES ($1, $2, $3, $4, $5)"
+)
+
+
+def test_secondo_inventory_item_per_lo_stesso_gruppo_e_utente_respinto(
+    migrated: Config, sql: Sql
+) -> None:
+    uid = _nuovo_utente(sql)
+    gid = _nuovo_gruppo(sql, uid)
+    sql(_INVENTARIO, uuid.uuid4(), uid, gid, 0, "bassa")
+    with pytest.raises(asyncpg.UniqueViolationError):
+        sql(_INVENTARIO, uuid.uuid4(), uid, gid, 1, "media")
+    altro = _nuovo_utente(sql)
+    sql(_INVENTARIO, uuid.uuid4(), altro, _nuovo_gruppo(sql, altro), 0, "bassa")
+
+
+def test_livello_o_livello_confidenza_fuori_dall_insieme_respinti(
+    migrated: Config, sql: Sql
+) -> None:
+    uid = _nuovo_utente(sql)
+    gid = _nuovo_gruppo(sql, uid)
+    with pytest.raises(asyncpg.CheckViolationError):
+        sql(_INVENTARIO, uuid.uuid4(), uid, gid, 3, "bassa")
+    with pytest.raises(asyncpg.CheckViolationError):
+        sql(_INVENTARIO, uuid.uuid4(), uid, gid, -1, "bassa")
+    with pytest.raises(asyncpg.CheckViolationError):
+        sql(_INVENTARIO, uuid.uuid4(), uid, gid, 2, "altissima")
+
+
+def test_inventory_item_con_default_e_quantita_esatte(migrated: Config, sql: Sql) -> None:
+    uid = _nuovo_utente(sql)
+    gid = _nuovo_gruppo(sql, uid)
+    sql(
+        "INSERT INTO inventory_item (id, user_id, group_id, quantita_ultimo_acquisto, livello,"
+        " livello_confidenza) VALUES ($1, $2, $3, 6.000, 1, 'media')",
+        uuid.uuid4(),
+        uid,
+        gid,
+    )
+    riga = sql("SELECT * FROM inventory_item")[0]
+    assert riga["tasso_consumo"] is None
+    assert riga["probabilmente_finito"] is False
+    assert str(riga["quantita_ultimo_acquisto"]) == "6.000"
+
+
+def test_job_nuovo_e_pending_senza_tentativi_e_stato_fuori_dall_insieme_respinto(
+    migrated: Config, sql: Sql
+) -> None:
+    uid = _nuovo_utente(sql)
+    sql(
+        "INSERT INTO job (id, user_id, tipo, payload) VALUES ($1, $2, 'ricalcolo_notturno',"
+        " '{\"x\": 1}'::jsonb)",
+        uuid.uuid4(),
+        uid,
+    )
+    riga = sql("SELECT * FROM job")[0]
+    assert (riga["stato"], riga["tentativi"], riga["lease_scade_il"]) == ("pending", 0, None)
+    with pytest.raises(asyncpg.CheckViolationError):
+        sql(
+            "INSERT INTO job (id, user_id, tipo, stato) VALUES ($1, $2, 'x', 'cancelled')",
+            uuid.uuid4(),
+            uid,
+        )
+
+
+def test_cancellando_l_utente_spariscono_magazzino_e_job(migrated: Config, sql: Sql) -> None:
+    uid = _nuovo_utente(sql)
+    sql(_INVENTARIO, uuid.uuid4(), uid, _nuovo_gruppo(sql, uid), 0, "bassa")
+    sql("INSERT INTO job (id, user_id, tipo) VALUES ($1, $2, 'x')", uuid.uuid4(), uid)
+    sql("DELETE FROM app_user WHERE id = $1", uid)
+    assert sql("SELECT 1 FROM inventory_item") == []
+    assert sql("SELECT 1 FROM job") == []

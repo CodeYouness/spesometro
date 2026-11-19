@@ -32,6 +32,8 @@ TABELLE = [
     "offer",
     "receipt",
     "receipt_line",
+    "inventory_item",
+    "job",
 ]
 
 
@@ -441,6 +443,62 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_receipt_line")),
+    )
+
+    op.create_table(
+        "inventory_item",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("user_id", sa.UUID(), nullable=False),
+        sa.Column("group_id", sa.UUID(), nullable=False),
+        sa.Column("data_ultimo_acquisto", sa.Date(), nullable=True),
+        sa.Column("quantita_ultimo_acquisto", sa.Numeric(precision=10, scale=3), nullable=True),
+        sa.Column("tasso_consumo", sa.Numeric(precision=10, scale=4), nullable=True),
+        sa.Column("durata_stimata_giorni", sa.Integer(), nullable=True),
+        sa.Column("scadenza_reale", sa.Date(), nullable=True),
+        sa.Column(
+            "probabilmente_finito", sa.Boolean(), server_default=sa.text("false"), nullable=False
+        ),
+        sa.Column("livello", sa.SmallInteger(), nullable=False),
+        sa.Column("livello_confidenza", sa.Text(), nullable=False),
+        sa.CheckConstraint("livello IN (0, 1, 2)", name=op.f("ck_inventory_item_livello")),
+        sa.CheckConstraint(
+            "livello_confidenza IN ('bassa', 'media', 'alta')",
+            name=op.f("ck_inventory_item_livello_confidenza"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["group_id"],
+            ["product_group.id"],
+            name=op.f("fk_inventory_item_group_id_product_group"),
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["app_user.id"],
+            name=op.f("fk_inventory_item_user_id_app_user"),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_inventory_item")),
+        sa.UniqueConstraint("user_id", "group_id", name=op.f("uq_inventory_item_user_id")),
+    )
+    op.create_table(
+        "job",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("user_id", sa.UUID(), nullable=False),
+        sa.Column("tipo", sa.Text(), nullable=False),
+        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("stato", sa.Text(), server_default=sa.text("'pending'"), nullable=False),
+        sa.Column("tentativi", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("lease_scade_il", sa.DateTime(timezone=True), nullable=True),
+        sa.CheckConstraint(
+            "stato IN ('pending', 'running', 'done', 'failed')", name=op.f("ck_job_stato")
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["app_user.id"],
+            name=op.f("fk_job_user_id_app_user"),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_job")),
     )
 
     for tabella in TABELLE:

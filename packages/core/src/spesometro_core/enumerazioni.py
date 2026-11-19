@@ -69,3 +69,18 @@ class CondizioneOfferta(StrEnum):
     NESSUNA = "nessuna"
     CARTA_FEDELTA = "carta_fedelta"
     MULTI_ACQUISTO = "multi_acquisto"
+
+
+class LivelloConfidenza(StrEnum):
+    """Affidabilità qualitativa della stima di magazzino (non la `confidenza` di provenienza)."""
+
+    BASSA = "bassa"
+    MEDIA = "media"
+    ALTA = "alta"
+
+
+class StatoJob(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"

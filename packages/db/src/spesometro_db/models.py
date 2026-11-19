@@ -9,6 +9,8 @@ from spesometro_core import (
     Catena,
     CondizioneOfferta,
     Fonte,
+    LivelloConfidenza,
+    StatoJob,
     StatoProvenienza,
     TipoDurata,
     TipoEsclusione,
@@ -17,6 +19,7 @@ from spesometro_core import (
     UnitaDiVendita,
 )
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -24,6 +27,7 @@ from sqlalchemy import (
     Index,
     Numeric,
     PrimaryKeyConstraint,
+    SmallInteger,
     Text,
     UniqueConstraint,
     func,
@@ -297,3 +301,50 @@ class ReceiptLine(Provenienza, Base):
     product_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("product.id", ondelete="SET NULL")
     )
+
+
+class InventoryItem(Base):
+    """Stima di quanto resta in casa di un gruppo: una sola riga per (utente, gruppo)."""
+
+    __tablename__ = "inventory_item"
+    __table_args__ = (
+        UniqueConstraint("user_id", "group_id"),
+        CheckConstraint("livello IN (0, 1, 2)", name="livello"),
+        check_in("livello_confidenza", LivelloConfidenza),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = user_id_column()
+    group_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("product_group.id", ondelete="CASCADE"), nullable=False
+    )
+    data_ultimo_acquisto: Mapped[date | None] = mapped_column(Date)
+    # In `unita_base` del gruppo.
+    quantita_ultimo_acquisto: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    # `unita_base` al giorno; NULL ai livelli bassi (stima dalla durata tipica).
+    tasso_consumo: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    durata_stimata_giorni: Mapped[int | None] = mapped_column()
+    # Scadenza reale inserita a mano (gruppi `scadenza_reale`).
+    scadenza_reale: Mapped[date | None] = mapped_column(Date)
+    probabilmente_finito: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    livello: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    livello_confidenza: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class Job(Base):
+    """Lavoro in background con stato, tentativi e lease (la coda arriva in un altro ticket)."""
+
+    __tablename__ = "job"
+    __table_args__ = (check_in("stato", StatoJob),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = user_id_column()
+    tipo: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict | None] = mapped_column(JSONB)
+    stato: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text(f"'{StatoJob.PENDING.value}'")
+    )
+    tentativi: Mapped[int] = mapped_column(nullable=False, server_default=text("0"))
+    lease_scade_il: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
