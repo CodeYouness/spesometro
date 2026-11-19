@@ -85,8 +85,25 @@ WHERE o.stato <> 'rifiutato'
 """
 
 
+PG_TRGM_IN_EXTENSIONS = """
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
+        WHERE e.extname = 'pg_trgm' AND n.nspname <> 'extensions'
+    ) THEN
+        ALTER EXTENSION pg_trgm SET SCHEMA extensions;
+    END IF;
+END $$
+"""
+
+
 def upgrade() -> None:
-    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    # `pg_trgm` nello schema `extensions` (advisor Supabase, lint 0014). Il downgrade non la
+    # toglie: se un'esecuzione precedente l'ha lasciata altrove, la si sposta.
+    op.execute("CREATE SCHEMA IF NOT EXISTS extensions")
+    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions")
+    op.execute(PG_TRGM_IN_EXTENSIONS)
 
     op.create_table(
         "app_user",

@@ -51,8 +51,23 @@ def test_downgrade_lascia_pg_trgm(migrated: Config, sql: Sql) -> None:
     assert sql("SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'")
 
 
-def test_pg_trgm_attiva(migrated: Config, sql: Sql) -> None:
-    assert sql("SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'")
+SCHEMA_PG_TRGM = (
+    "SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace"
+    " WHERE e.extname = 'pg_trgm'"
+)
+
+
+def test_pg_trgm_attiva_nello_schema_extensions(migrated: Config, sql: Sql) -> None:
+    # L'advisor di Supabase segnala le estensioni in `public` (lint 0014).
+    assert [r["nspname"] for r in sql(SCHEMA_PG_TRGM)] == ["extensions"]
+
+
+def test_upgrade_sposta_pg_trgm_lasciata_in_public(alembic_cfg: Config, sql: Sql) -> None:
+    # Il downgrade non toglie l'estensione: se una versione precedente l'ha messa in `public`,
+    # l'upgrade la porta in `extensions`.
+    sql("CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public")
+    command.upgrade(alembic_cfg, "head")
+    assert [r["nspname"] for r in sql(SCHEMA_PG_TRGM)] == ["extensions"]
 
 
 def _nuovo_utente(sql: Sql) -> uuid.UUID:
