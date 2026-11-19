@@ -1,0 +1,20 @@
+[project]
+name = "spesometro-db"
+version = "0.1.0"
+description = "Modelli SQLAlchemy, motore async e migrazioni Alembic. Fuori da packages/core."
+requires-python = "==3.13.*"
+dependencies = [
+    "spesometro-core",
+    "sqlalchemy==2.1.9",
+    "greenlet==3.5.6",
+    "asyncpg==0.32.0",
+    "alembic==1.20.1",
+    "pgvector==0.5.1",
+]
+
+[tool.uv.sources]
+spesometro-core = { workspace = true }
+
+[build-system]
+requires = ["uv_build==0.13.6"]
+build-backend = "uv_build"
