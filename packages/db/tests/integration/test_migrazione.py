@@ -38,6 +38,10 @@ def test_rls_abilitata_su_ogni_tabella(migrated: Config, sql: Sql) -> None:
         "product",
         "product_alias",
         "group_alternative",
+        "flyer",
+        "offer",
+        "receipt",
+        "receipt_line",
     } <= nomi
     assert senza_rls == [] or senza_rls == ["alembic_version"]
 
@@ -205,3 +209,121 @@ def test_cancellando_l_utente_spariscono_catalogo_e_alias(migrated: Config, sql:
     sql("DELETE FROM app_user WHERE id = $1", uid)
     for tabella in ("product_group", "product", "product_alias"):
         assert sql(f"SELECT 1 FROM {tabella}") == []
+
+
+_FLYER = (
+    "INSERT INTO flyer (id, user_id, catena, validita_da, validita_a, tipo, sha256)"
+    " VALUES ($1, $2, 'lidl', '2026-11-16', '2026-11-22', 'settimanale', $3)"
+)
+_RECEIPT = (
+    "INSERT INTO receipt (id, user_id, data_ora, catena, totale)"
+    " VALUES ($1, $2, '2026-11-18 17:42:00', $3, 5.34)"
+)
+
+
+def test_secondo_volantino_con_lo_stesso_sha256_respinto_per_lo_stesso_utente(
+    migrated: Config, sql: Sql
+) -> None:
+    uid, altro = _nuovo_utente(sql), _nuovo_utente(sql)
+    sql(_FLYER, uuid.uuid4(), uid, "abc")
+    with pytest.raises(asyncpg.UniqueViolationError):
+        sql(_FLYER, uuid.uuid4(), uid, "abc")
+    sql(_FLYER, uuid.uuid4(), altro, "abc")  # un altro utente può avere lo stesso file
+
+
+def test_tipo_di_volantino_fuori_dall_insieme_respinto(migrated: Config, sql: Sql) -> None:
+    uid = _nuovo_utente(sql)
+    with pytest.raises(asyncpg.CheckViolationError):
+        sql(_FLYER.replace("'settimanale'", "'mensile'"), uuid.uuid4(), uid, "abc")
+
+
+def test_secondo_scontrino_con_la_stessa_chiave_naturale_respinto(
+    migrated: Config, sql: Sql
+) -> None:
+    uid = _nuovo_utente(sql)
+    sql(_RECEIPT, uuid.uuid4(), uid, "lidl")
+    with pytest.raises(asyncpg.UniqueViolationError):
+        sql(_RECEIPT, uuid.uuid4(), uid, "lidl")
+    sql(_RECEIPT, uuid.uuid4(), uid, "coop")  # catena diversa: scontrino diverso
+
+
+def test_scontrino_di_catena_altra_accettato(migrated: Config, sql: Sql) -> None:
+    uid = _nuovo_utente(sql)
+    sql(_RECEIPT, uuid.uuid4(), uid, "altra")
+    with pytest.raises(asyncpg.CheckViolationError):
+        sql(_RECEIPT, uuid.uuid4(), uid, "conad")
+
+
+def test_offerta_e_riga_di_scontrino_con_provenienza_e_numeri_esatti(
+    migrated: Config, sql: Sql
+) -> None:
+    uid = _nuovo_utente(sql)
+    fid, rid = uuid.uuid4(), uuid.uuid4()
+    sql(_FLYER, fid, uid, "abc")
+    sql(_RECEIPT, rid, uid, "lidl")
+    sql(
+        "INSERT INTO offer (id, user_id, flyer_id, testo_grezzo, prezzo_unitario, unita, fonte)"
+        " VALUES ($1, $2, $3, 'LATTE 1L', 0.8900, 'L', 'volantino')",
+        uuid.uuid4(),
+        uid,
+        fid,
+    )
+    sql(
+        "INSERT INTO receipt_line (id, user_id, receipt_id, testo_grezzo, quantita, prezzo, fonte)"
+        " VALUES ($1, $2, $3, 'BANANE', 1.234, 2.58, 'scontrino')",
+        uuid.uuid4(),
+        uid,
+        rid,
+    )
+    riga = sql("SELECT quantita, sconto, stato FROM receipt_line")[0]
+    assert str(riga["quantita"]) == "1.234"
+    assert riga["sconto"] == 0
+    assert riga["stato"] == "auto"
+    assert sql("SELECT condizione FROM offer")[0]["condizione"] == "nessuna"
+
+
+def test_condizione_o_unita_dell_offerta_fuori_dall_insieme_respinte(
+    migrated: Config, sql: Sql
+) -> None:
+    uid = _nuovo_utente(sql)
+    fid = uuid.uuid4()
+    sql(_FLYER, fid, uid, "abc")
+    ins = (
+        "INSERT INTO offer (id, user_id, flyer_id, testo_grezzo, condizione, unita, fonte)"
+        " VALUES ($1, $2, $3, 'x', $4, $5, 'volantino')"
+    )
+    with pytest.raises(asyncpg.CheckViolationError):
+        sql(ins, uuid.uuid4(), uid, fid, "sconto_famiglia", "kg")
+    with pytest.raises(asyncpg.CheckViolationError):
+        sql(ins, uuid.uuid4(), uid, fid, "nessuna", "etto")
+
+
+def test_cancellando_volantino_e_scontrino_spariscono_le_righe_ma_non_il_prodotto(
+    migrated: Config, sql: Sql
+) -> None:
+    uid = _nuovo_utente(sql)
+    pid = _nuovo_prodotto(sql, uid)
+    fid, rid = uuid.uuid4(), uuid.uuid4()
+    sql(_FLYER, fid, uid, "abc")
+    sql(_RECEIPT, rid, uid, "lidl")
+    sql(
+        "INSERT INTO offer (id, user_id, flyer_id, testo_grezzo, product_id, fonte)"
+        " VALUES ($1, $2, $3, 'x', $4, 'volantino')",
+        uuid.uuid4(),
+        uid,
+        fid,
+        pid,
+    )
+    sql(
+        "INSERT INTO receipt_line (id, user_id, receipt_id, testo_grezzo, quantita, prezzo, fonte,"
+        " product_id) VALUES ($1, $2, $3, 'x', 1, 1, 'scontrino', $4)",
+        uuid.uuid4(),
+        uid,
+        rid,
+        pid,
+    )
+    sql("DELETE FROM flyer WHERE id = $1", fid)
+    sql("DELETE FROM receipt WHERE id = $1", rid)
+    assert sql("SELECT 1 FROM offer") == []
+    assert sql("SELECT 1 FROM receipt_line") == []
+    assert sql("SELECT 1 FROM product WHERE id = $1", pid)

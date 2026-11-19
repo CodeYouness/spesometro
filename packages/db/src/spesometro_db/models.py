@@ -1,21 +1,24 @@
 """Modelli SQLAlchemy. Ogni tabella ha `user_id` (tranne `app_user`), vedi `user_id_column`."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from spesometro_core import (
     Attributo,
     Catena,
+    CondizioneOfferta,
     Fonte,
     StatoProvenienza,
     TipoDurata,
     TipoEsclusione,
+    TipoVolantino,
     UnitaBase,
     UnitaDiVendita,
 )
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -26,7 +29,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from spesometro_db.base import (
@@ -193,4 +196,104 @@ class GroupAlternative(Provenienza, Base):
     )
     group_b: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("product_group.id", ondelete="CASCADE"), nullable=False
+    )
+
+
+class Flyer(Base):
+    """Volantino. Lo stesso file (`sha256`) non entra due volte per lo stesso utente."""
+
+    __tablename__ = "flyer"
+    __table_args__ = (
+        UniqueConstraint("user_id", "sha256"),
+        check_in("catena", Catena),
+        check_in("tipo", TipoVolantino),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = user_id_column()
+    catena: Mapped[str] = mapped_column(Text, nullable=False)
+    insegna: Mapped[str | None] = mapped_column(Text)
+    zona: Mapped[str | None] = mapped_column(Text)
+    validita_da: Mapped[date] = mapped_column(Date, nullable=False)
+    validita_a: Mapped[date] = mapped_column(Date, nullable=False)
+    # `catalogo` = listino: i suoi prezzi non sono promozioni (vista PriceObservation).
+    tipo: Mapped[str] = mapped_column(Text, nullable=False)
+    numero_pagine: Mapped[int | None] = mapped_column()
+    url_origine: Mapped[str | None] = mapped_column(Text)
+    sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    incluso: Mapped[bool] = mapped_column(nullable=False, server_default=text("true"))
+
+
+class Offer(Provenienza, Base):
+    __tablename__ = "offer"
+    __table_args__ = (
+        check_in("condizione", CondizioneOfferta),
+        check_in("unita", UnitaBase),
+        *vincoli_provenienza(),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = user_id_column()
+    flyer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("flyer.id", ondelete="CASCADE"), nullable=False
+    )
+    pagina: Mapped[int | None] = mapped_column()
+    testo_grezzo: Mapped[str] = mapped_column(Text, nullable=False)
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("product.id", ondelete="SET NULL")
+    )
+    prezzo_confezione: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    # Prezzo per `unita`; con `multi_acquisto` è quello effettivo a `quantita_minima`.
+    prezzo_unitario: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    unita: Mapped[str | None] = mapped_column(Text)
+    prezzo_barrato: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    sconto_dichiarato: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    validita_da: Mapped[date | None] = mapped_column(Date)
+    validita_a: Mapped[date | None] = mapped_column(Date)
+    condizione: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text(f"'{CondizioneOfferta.NESSUNA.value}'")
+    )
+    quantita_minima: Mapped[int | None] = mapped_column()
+    limite_pezzi: Mapped[int | None] = mapped_column()
+
+
+class Receipt(Base):
+    """Scontrino. Data e ora come stampate (senza fuso); chiave naturale per non duplicarlo."""
+
+    __tablename__ = "receipt"
+    __table_args__ = (
+        UniqueConstraint("user_id", "catena", "data_ora", "totale"),
+        check_in("catena", Catena),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = user_id_column()
+    data_ora: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    catena: Mapped[str] = mapped_column(Text, nullable=False)
+    totale: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    impronta: Mapped[str | None] = mapped_column(Text)
+    estrazione_grezza: Mapped[dict | None] = mapped_column(JSONB)
+
+
+class ReceiptLine(Provenienza, Base):
+    """Riga di scontrino. Il prezzo unitario non si salva: lo calcola la vista."""
+
+    __tablename__ = "receipt_line"
+    __table_args__ = (*vincoli_provenienza(),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID] = user_id_column()
+    receipt_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("receipt.id", ondelete="CASCADE"), nullable=False
+    )
+    testo_grezzo: Mapped[str] = mapped_column(Text, nullable=False)
+    # Pezzi o kg (peso variabile).
+    quantita: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False)
+    # Totale di riga prima dello sconto; `sconto` è un importo (positivo).
+    prezzo: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    sconto: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, server_default=text("0")
+    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("product.id", ondelete="SET NULL")
     )

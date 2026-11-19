@@ -58,3 +58,14 @@ class StatoProvenienza(StrEnum):
     AUTO = "auto"
     RIVISTO = "rivisto"
     RIFIUTATO = "rifiutato"
+
+
+class TipoVolantino(StrEnum):
+    SETTIMANALE = "settimanale"
+    CATALOGO = "catalogo"
+
+
+class CondizioneOfferta(StrEnum):
+    NESSUNA = "nessuna"
+    CARTA_FEDELTA = "carta_fedelta"
+    MULTI_ACQUISTO = "multi_acquisto"

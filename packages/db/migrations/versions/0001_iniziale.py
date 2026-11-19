@@ -1,4 +1,4 @@
-"""iniziale: User, Exclusion, catalogo e provenienza, estensione pg_trgm, RLS senza policy
+"""iniziale: User, Exclusion, catalogo, provenienza, fonti dei prezzi, pg_trgm, RLS senza policy
 
 Migrazione iniziale e unica dello schema (spec schema-dati): i ticket 02-05 la estendono
 aggiungendo `op.create_table` dopo quelle esistenti e il nome della tabella in `TABELLE`.
@@ -28,6 +28,10 @@ TABELLE = [
     "product",
     "product_alias",
     "group_alternative",
+    "flyer",
+    "offer",
+    "receipt",
+    "receipt_line",
 ]
 
 
@@ -273,6 +277,170 @@ def upgrade() -> None:
         sa.UniqueConstraint(
             "user_id", "group_a", "group_b", name=op.f("uq_group_alternative_user_id")
         ),
+    )
+
+    op.create_table(
+        "flyer",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("user_id", sa.UUID(), nullable=False),
+        sa.Column("catena", sa.Text(), nullable=False),
+        sa.Column("insegna", sa.Text(), nullable=True),
+        sa.Column("zona", sa.Text(), nullable=True),
+        sa.Column("validita_da", sa.Date(), nullable=False),
+        sa.Column("validita_a", sa.Date(), nullable=False),
+        sa.Column("tipo", sa.Text(), nullable=False),
+        sa.Column("numero_pagine", sa.Integer(), nullable=True),
+        sa.Column("url_origine", sa.Text(), nullable=True),
+        sa.Column("sha256", sa.Text(), nullable=False),
+        sa.Column("incluso", sa.Boolean(), server_default=sa.text("true"), nullable=False),
+        sa.CheckConstraint(
+            "catena IN ('lidl', 'eurospin', 'coop', 'altra')", name=op.f("ck_flyer_catena")
+        ),
+        sa.CheckConstraint("tipo IN ('settimanale', 'catalogo')", name=op.f("ck_flyer_tipo")),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["app_user.id"],
+            name=op.f("fk_flyer_user_id_app_user"),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_flyer")),
+        sa.UniqueConstraint("user_id", "sha256", name=op.f("uq_flyer_user_id")),
+    )
+    op.create_table(
+        "offer",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("user_id", sa.UUID(), nullable=False),
+        sa.Column("flyer_id", sa.UUID(), nullable=False),
+        sa.Column("pagina", sa.Integer(), nullable=True),
+        sa.Column("testo_grezzo", sa.Text(), nullable=False),
+        sa.Column("product_id", sa.UUID(), nullable=True),
+        sa.Column("prezzo_confezione", sa.Numeric(precision=10, scale=2), nullable=True),
+        sa.Column("prezzo_unitario", sa.Numeric(precision=10, scale=4), nullable=True),
+        sa.Column("unita", sa.Text(), nullable=True),
+        sa.Column("prezzo_barrato", sa.Numeric(precision=10, scale=2), nullable=True),
+        sa.Column("sconto_dichiarato", sa.Numeric(precision=10, scale=2), nullable=True),
+        sa.Column("validita_da", sa.Date(), nullable=True),
+        sa.Column("validita_a", sa.Date(), nullable=True),
+        sa.Column("condizione", sa.Text(), server_default=sa.text("'nessuna'"), nullable=False),
+        sa.Column("quantita_minima", sa.Integer(), nullable=True),
+        sa.Column("limite_pezzi", sa.Integer(), nullable=True),
+        sa.Column("fonte", sa.Text(), nullable=False),
+        sa.Column("fonte_id", sa.UUID(), nullable=True),
+        sa.Column(
+            "acquisito_il",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("confidenza", sa.Numeric(precision=4, scale=3), nullable=True),
+        sa.Column("stato", sa.Text(), server_default=sa.text("'auto'"), nullable=False),
+        sa.CheckConstraint(
+            "condizione IN ('nessuna', 'carta_fedelta', 'multi_acquisto')",
+            name=op.f("ck_offer_condizione"),
+        ),
+        sa.CheckConstraint("unita IN ('kg', 'L', 'pezzo')", name=op.f("ck_offer_unita")),
+        sa.CheckConstraint(
+            "fonte IN ('volantino', 'scontrino', 'umano', 'regola')",
+            name=op.f("ck_offer_fonte"),
+        ),
+        sa.CheckConstraint(
+            "stato IN ('auto', 'rivisto', 'rifiutato')", name=op.f("ck_offer_stato")
+        ),
+        sa.CheckConstraint("confidenza >= 0 AND confidenza <= 1", name=op.f("ck_offer_confidenza")),
+        sa.ForeignKeyConstraint(
+            ["flyer_id"],
+            ["flyer.id"],
+            name=op.f("fk_offer_flyer_id_flyer"),
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["product_id"],
+            ["product.id"],
+            name=op.f("fk_offer_product_id_product"),
+            ondelete="SET NULL",
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["app_user.id"],
+            name=op.f("fk_offer_user_id_app_user"),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_offer")),
+    )
+    op.create_table(
+        "receipt",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("user_id", sa.UUID(), nullable=False),
+        sa.Column("data_ora", sa.DateTime(), nullable=False),
+        sa.Column("catena", sa.Text(), nullable=False),
+        sa.Column("totale", sa.Numeric(precision=10, scale=2), nullable=False),
+        sa.Column("impronta", sa.Text(), nullable=True),
+        sa.Column("estrazione_grezza", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.CheckConstraint(
+            "catena IN ('lidl', 'eurospin', 'coop', 'altra')", name=op.f("ck_receipt_catena")
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["app_user.id"],
+            name=op.f("fk_receipt_user_id_app_user"),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_receipt")),
+        sa.UniqueConstraint(
+            "user_id", "catena", "data_ora", "totale", name=op.f("uq_receipt_user_id")
+        ),
+    )
+    op.create_table(
+        "receipt_line",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("user_id", sa.UUID(), nullable=False),
+        sa.Column("receipt_id", sa.UUID(), nullable=False),
+        sa.Column("testo_grezzo", sa.Text(), nullable=False),
+        sa.Column("quantita", sa.Numeric(precision=10, scale=3), nullable=False),
+        sa.Column("prezzo", sa.Numeric(precision=10, scale=2), nullable=False),
+        sa.Column(
+            "sconto", sa.Numeric(precision=10, scale=2), server_default=sa.text("0"), nullable=False
+        ),
+        sa.Column("product_id", sa.UUID(), nullable=True),
+        sa.Column("fonte", sa.Text(), nullable=False),
+        sa.Column("fonte_id", sa.UUID(), nullable=True),
+        sa.Column(
+            "acquisito_il",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("confidenza", sa.Numeric(precision=4, scale=3), nullable=True),
+        sa.Column("stato", sa.Text(), server_default=sa.text("'auto'"), nullable=False),
+        sa.CheckConstraint(
+            "fonte IN ('volantino', 'scontrino', 'umano', 'regola')",
+            name=op.f("ck_receipt_line_fonte"),
+        ),
+        sa.CheckConstraint(
+            "stato IN ('auto', 'rivisto', 'rifiutato')", name=op.f("ck_receipt_line_stato")
+        ),
+        sa.CheckConstraint(
+            "confidenza >= 0 AND confidenza <= 1", name=op.f("ck_receipt_line_confidenza")
+        ),
+        sa.ForeignKeyConstraint(
+            ["product_id"],
+            ["product.id"],
+            name=op.f("fk_receipt_line_product_id_product"),
+            ondelete="SET NULL",
+        ),
+        sa.ForeignKeyConstraint(
+            ["receipt_id"],
+            ["receipt.id"],
+            name=op.f("fk_receipt_line_receipt_id_receipt"),
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["app_user.id"],
+            name=op.f("fk_receipt_line_user_id_app_user"),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_receipt_line")),
     )
 
     for tabella in TABELLE:

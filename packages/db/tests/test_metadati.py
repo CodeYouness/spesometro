@@ -5,20 +5,26 @@ import re
 from spesometro_core import (
     Attributo,
     Catena,
+    CondizioneOfferta,
     Fonte,
     StatoProvenienza,
     TipoDurata,
     TipoEsclusione,
+    TipoVolantino,
     UnitaBase,
     UnitaDiVendita,
 )
 from spesometro_db import Base
 from spesometro_db.models import (
     Exclusion,
+    Flyer,
     GroupAlternative,
+    Offer,
     Product,
     ProductAlias,
     ProductGroup,
+    Receipt,
+    ReceiptLine,
     User,
 )
 from sqlalchemy import CheckConstraint, Index, Table, UniqueConstraint
@@ -78,8 +84,8 @@ COLONNE_PROVENIENZA = {"fonte", "fonte_id", "acquisito_il", "confidenza", "stato
 
 
 def test_provenienza_solo_sulle_tabelle_che_la_prevedono() -> None:
-    con = [Product, ProductAlias, GroupAlternative]
-    senza = [User, Exclusion, ProductGroup]
+    con = [Product, ProductAlias, GroupAlternative, Offer, ReceiptLine]
+    senza = [User, Exclusion, ProductGroup, Flyer, Receipt]
     for modello in con:
         t = modello.__table__
         assert set(t.c.keys()) >= COLONNE_PROVENIENZA, t.name
@@ -134,3 +140,54 @@ def test_alternativa_orientata_unica_e_mai_con_se_stessa() -> None:
 
 def test_nessuna_tabella_di_equivalenze() -> None:
     assert not [n for n in Base.metadata.tables if "equivalen" in n]
+
+
+def _unici(tabella: Table) -> list[list[str]]:
+    return [
+        [c.name for c in u.columns] for u in tabella.constraints if isinstance(u, UniqueConstraint)
+    ]
+
+
+def test_check_delle_fonti_dei_prezzi_coincidono_con_le_enumerazioni_di_core() -> None:
+    assert _valori_check(Flyer.__table__, "tipo") == {t.value for t in TipoVolantino}
+    assert _valori_check(Flyer.__table__, "catena") == {c.value for c in Catena}
+    assert _valori_check(Offer.__table__, "condizione") == {c.value for c in CondizioneOfferta}
+    assert _valori_check(Offer.__table__, "unita") == {u.value for u in UnitaBase}
+    assert _valori_check(Receipt.__table__, "catena") == {c.value for c in Catena}
+
+
+def test_volantino_unico_per_utente_e_sha256() -> None:
+    assert ["user_id", "sha256"] in _unici(Flyer.__table__)
+
+
+def test_scontrino_unico_per_utente_catena_data_ora_e_totale() -> None:
+    assert ["user_id", "catena", "data_ora", "totale"] in _unici(Receipt.__table__)
+
+
+def test_importi_e_quantita_delle_fonti_sono_numeric_mai_float() -> None:
+    attese = {
+        Offer: [
+            "prezzo_confezione",
+            "prezzo_unitario",
+            "prezzo_barrato",
+            "sconto_dichiarato",
+        ],
+        Receipt: ["totale"],
+        ReceiptLine: ["quantita", "prezzo", "sconto"],
+    }
+    for modello, colonne in attese.items():
+        for nome in colonne:
+            assert type(modello.__table__.c[nome].type).__name__ == "Numeric", nome
+
+
+def test_data_e_ora_dello_scontrino_senza_fuso() -> None:
+    assert Receipt.__table__.c.data_ora.type.timezone is False
+
+
+def test_righe_figlie_cadono_con_la_sorgente_e_il_prodotto_resta_opzionale() -> None:
+    for tabella, colonna in ((Offer.__table__, "flyer_id"), (ReceiptLine.__table__, "receipt_id")):
+        (fk,) = tabella.c[colonna].foreign_keys
+        assert fk.ondelete == "CASCADE"
+        assert not tabella.c[colonna].nullable
+    assert Offer.__table__.c.product_id.nullable
+    assert ReceiptLine.__table__.c.product_id.nullable

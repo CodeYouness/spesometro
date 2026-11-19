@@ -6,10 +6,12 @@ Questo pacchetto non dipende da web o DB (SPEC §7).
 from spesometro_core.enumerazioni import (
     Attributo,
     Catena,
+    CondizioneOfferta,
     Fonte,
     StatoProvenienza,
     TipoDurata,
     TipoEsclusione,
+    TipoVolantino,
     UnitaBase,
     UnitaDiVendita,
 )
@@ -17,10 +19,12 @@ from spesometro_core.enumerazioni import (
 __all__ = [
     "Attributo",
     "Catena",
+    "CondizioneOfferta",
     "Fonte",
     "StatoProvenienza",
     "TipoDurata",
     "TipoEsclusione",
+    "TipoVolantino",
     "UnitaBase",
     "UnitaDiVendita",
 ]
