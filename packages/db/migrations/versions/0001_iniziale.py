@@ -37,6 +37,54 @@ TABELLE = [
 ]
 
 
+# Vista dei prezzi unitari (ADR 0006): prezzo di riferimento, verdetto e grafici leggono da qui.
+# `security_invoker`: la RLS delle tabelle sottostanti vale anche per chi interroga la vista.
+# La vista non arrotonda al centesimo: solo il tipo `numeric(12, 4)` (come `offer.prezzo_unitario`).
+# Entrano righe `stato <> 'rifiutato'` il cui Product sia assegnato a un gruppo e non rifiutato.
+PRICE_OBSERVATION = """
+CREATE VIEW price_observation WITH (security_invoker = true) AS
+SELECT
+    rl.user_id,
+    p.group_id,
+    rl.product_id,
+    r.catena,
+    r.data_ora::date AS data,
+    ((rl.prezzo - rl.sconto) / (
+        CASE p.unita_di_vendita
+            WHEN 'peso_variabile' THEN rl.quantita
+            ELSE rl.quantita * p.dimensione_base
+        END
+    ))::numeric(12, 4) AS prezzo_unitario,
+    'scontrino'::text AS fonte,
+    rl.sconto > 0 AS promo
+FROM receipt_line rl
+JOIN receipt r ON r.id = rl.receipt_id
+JOIN product p ON p.id = rl.product_id
+WHERE rl.stato <> 'rifiutato'
+  AND p.stato <> 'rifiutato'
+  AND p.group_id IS NOT NULL
+  AND rl.quantita > 0
+  AND (p.unita_di_vendita = 'peso_variabile' OR p.dimensione_base > 0)
+UNION ALL
+SELECT
+    o.user_id,
+    p.group_id,
+    o.product_id,
+    f.catena,
+    COALESCE(o.validita_da, f.validita_da) AS data,
+    o.prezzo_unitario::numeric(12, 4),
+    'volantino'::text AS fonte,
+    f.tipo <> 'catalogo' AS promo
+FROM offer o
+JOIN flyer f ON f.id = o.flyer_id
+JOIN product p ON p.id = o.product_id
+WHERE o.stato <> 'rifiutato'
+  AND p.stato <> 'rifiutato'
+  AND p.group_id IS NOT NULL
+  AND o.prezzo_unitario IS NOT NULL
+"""
+
+
 def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
 
@@ -504,9 +552,13 @@ def upgrade() -> None:
     for tabella in TABELLE:
         op.execute(f"ALTER TABLE {tabella} ENABLE ROW LEVEL SECURITY")
 
+    op.execute(PRICE_OBSERVATION)
+
 
 def downgrade() -> None:
-    # Ordine inverso: i figli prima dei genitori. La RLS sparisce con le tabelle.
+    # La vista dipende dalle tabelle: prima lei. Poi i figli prima dei genitori; la RLS
+    # sparisce con le tabelle.
+    op.execute("DROP VIEW IF EXISTS price_observation")
     for tabella in reversed(TABELLE):
         op.drop_table(tabella)
     op.execute("DROP EXTENSION IF EXISTS pg_trgm")
