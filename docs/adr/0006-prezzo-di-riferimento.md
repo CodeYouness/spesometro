@@ -1,0 +1,5 @@
+# 0006 — Prezzo di riferimento dagli scontrini
+
+**Contesto:** la "vera occasione" era definita sulla mediana dei prezzi da volantino con almeno 8 osservazioni. I volantini contengono solo prezzi promozionali e con 4–5 settimane di raccolta (ADR 0004) le 8 osservazioni non arrivano: all'esame la funzione sarebbe rimasta spenta sui dati reali.
+**Decisione:** il prezzo di riferimento di un gruppo è la mediana dei prezzi unitari pagati sugli scontrini (ultimi 6 acquisti, righe senza sconto). Il verdetto confronta l'offerta con quel prezzo e con il miglior prezzo dello stesso gruppo negli altri volantini della settimana. Sorgente unica: la vista `PriceObservation`. La lista aggiunge una catena solo sopra la soglia di viaggio (default 5 €, massimo 2 catene).
+**Conseguenze:** soglia dati a 2 acquisti del gruppo; minimo storico e ritorno delle promozioni diventano lavoro futuro; `Offer` porta `condizione` e `quantità_minima` per non confrontare prezzi con carta o multi-acquisto come prezzi pieni.
