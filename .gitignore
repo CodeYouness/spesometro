@@ -4,3 +4,10 @@ data/
 .venv/
 # Preferenze personali di Claude Code (non condivise)
 .claude/settings.local.json
+
+# Sistema e cache
+.DS_Store
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.nicegui/

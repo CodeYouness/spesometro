@@ -1,0 +1,31 @@
+[project]
+name = "spesometro"
+version = "0.1.0"
+description = "Assistente per la spesa: scontrini, volantini, magazzino e lista ottimizzata."
+requires-python = "==3.13.*"
+dependencies = ["spesometro-api", "spesometro-core", "spesometro-web"]
+
+[dependency-groups]
+dev = ["pytest==9.2.0", "ruff==0.17.6", "httpx2==2.16.2"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["apps/*", "packages/*"]
+
+[tool.uv.sources]
+spesometro-api = { workspace = true }
+spesometro-core = { workspace = true }
+spesometro-web = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["apps", "packages"]
+addopts = "--import-mode=importlib"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]

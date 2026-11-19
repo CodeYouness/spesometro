@@ -1,0 +1,13 @@
+[project]
+name = "spesometro-web"
+version = "0.1.0"
+description = "UI NiceGUI, montata sull'app FastAPI con ui.run_with."
+requires-python = "==3.13.*"
+dependencies = ["spesometro-core", "nicegui==4.0.0", "fastapi==0.165.0", "starlette==1.10.0"]
+
+[tool.uv.sources]
+spesometro-core = { workspace = true }
+
+[build-system]
+requires = ["uv_build==0.13.6"]
+build-backend = "uv_build"
