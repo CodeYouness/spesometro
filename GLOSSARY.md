@@ -22,7 +22,7 @@ _Avoid_: sinonimo, nome catena
 Due `Product` dello stesso `ProductGroup`: sostituibili senza chiedere e confrontati insieme nel confronto prezzi tra catene. Non è una tabella: è l'appartenenza allo stesso gruppo.
 
 **`GroupAlternative`**:
-Relazione tra due `ProductGroup` (`group_a`, `group_b`) in cui il secondo soddisfa lo stesso bisogno del primo; nasce solo da conferma umana e porta la provenienza.
+Relazione orientata tra due `ProductGroup` (`group_a`, `group_b`) in cui il secondo soddisfa lo stesso bisogno del primo, non il contrario; nasce solo da conferma umana e porta la provenienza.
 _Avoid_: `ProductEquivalence` (rimossa in v1.4), sostituto
 
 **`alternativa`**:
@@ -33,11 +33,19 @@ _Avoid_: sostituto
 Insieme chiuso di tag di un `Product` (es. `maiale`, `alcol`, `glutine`) su cui lavorano le esclusioni alimentari; proposti dal modello a partire dal nome, confermati da una persona (`attributi_verificati`).
 _Avoid_: ingredienti (la lista ingredienti non viene letta)
 
+**`Exclusion`**:
+Esclusione alimentare di un utente su un attributo, di tipo `allergia` (un prodotto con attributi non verificati è escluso) o `dieta` (filtro sui tag proposti, con avviso finché manca la conferma).
+_Avoid_: preferenza, filtro, intolleranza
+
 **`tipo_durata`**:
 Modo in cui un `ProductGroup` si deteriora, con tre valori: `scadenza_reale` (data di scadenza inserita a mano), `durata_stimata` (durata tipica in giorni) e `non_deperibile`.
 _Avoid_: shelf life, conservabilità
 
 ### Prezzi e acquisti
+
+**`catena`**:
+Azienda della grande distribuzione a cui appartiene un negozio: `lidl`, `eurospin`, `coop` oppure `altra` (scontrini di catene fuori dal perimetro, salvati senza catalogo né volantini).
+_Avoid_: negozio, supermercato, `insegna` (è il marchio o la cooperativa dentro la catena)
 
 **`Flyer`**:
 Volantino di una catena: `insegna`, validità, `tipo` (settimanale | catalogo), `sha256` del file e flag `incluso`, che decide se entra nell'estrazione.
@@ -47,11 +55,11 @@ _Avoid_: offerta (il volantino è la fonte, non l'offerta)
 Marchio o cooperativa sotto cui esce un `Flyer` (es. Coop Alleanza 3.0, Ipercoop): "Coop" da sola non identifica i prezzi validi per un negozio.
 
 **`Offer`**:
-Prezzo di un prodotto in un `Flyer`, con validità propria (`validità_da/a`), prezzo a confezione e unitario, prezzo barrato, sconto dichiarato e `condizione`; il `product` resta vuoto finché la riga non è mappata.
+Prezzo di un prodotto in un `Flyer`, con il testo grezzo del volantino, validità propria (`validità_da/a`), prezzo a confezione e unitario, prezzo barrato, sconto dichiarato e `condizione`; il `product` resta vuoto finché la riga non è mappata.
 _Avoid_: promozione, volantino
 
 **`condizione`**:
-Vincolo a cui vale il prezzo di una `Offer`: `nessuna`, `carta_fedeltà` (anche i prezzi per soci) o `multi_acquisto` (con `quantità_minima`).
+Vincolo a cui vale il prezzo di una `Offer`: `nessuna`, `carta_fedelta` (anche i prezzi per soci) o `multi_acquisto` (con `quantità_minima`).
 
 **`Receipt`**:
 Scontrino d'acquisto di una catena, con data e ora, totale, `impronta` per la deduplica ed `estrazione_grezza`.
@@ -107,7 +115,7 @@ Insieme di quattro attributi (`fonte`, `acquisito_il`, `confidenza`, `stato`) ch
 _Avoid_: audit, storico revisioni
 
 **`fonte`**:
-Origine del dato: `volantino_id`, `scontrino_id`, `umano` o `regola`.
+Origine del dato: un `volantino` o uno `scontrino` (con il riferimento a quale), `umano` o `regola`.
 
 **`acquisito_il`**:
 Momento in cui il dato è entrato nel sistema.
