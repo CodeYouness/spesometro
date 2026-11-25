@@ -140,6 +140,16 @@ _Avoid_: confusione con lo `stato` di un `Job`
 Tabella delle quantità minime di dati sotto cui una previsione (consumo/fabbisogno, prezzo "davvero conveniente", ritorno promozione) non viene data come affidabile e si mostra il ripiego con badge di confidenza.
 _Avoid_: soglie di matching (quelle decidono auto-accetta/revisione, non le previsioni)
 
+### Dati personali
+
+**Minimizzazione**:
+Insieme delle riduzioni applicate a uno scontrino perché all'esterno e in archivio arrivi solo ciò che serve: immagine rimpicciolita e senza metadati, ritaglio facoltativo fatto dall'utente, nessun dato di pagamento richiesto, redazione di ciò che è stato estratto.
+_Avoid_: anonimizzazione (lo scontrino resta dell'utente), taglio automatico (non esiste)
+
+**Redazione**:
+Sostituzione, nel testo estratto da uno scontrino, dei dati personali riconoscibili (numero di carta mascherato, codice fiscale, codice fidelity) con un segnaposto che ne dice solo il tipo; avviene prima che il dato venga salvato o tracciato.
+_Avoid_: censura, mascheramento, oscuramento dell'immagine (la redazione agisce sul testo, non sulla foto)
+
 ### Valutazione
 
 **Golden set**:
