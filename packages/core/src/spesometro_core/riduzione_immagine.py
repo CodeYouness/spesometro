@@ -5,6 +5,7 @@ viene riportato in uscita. Nessun legame con upload o provider (lo fa il ticket 
 """
 
 import io
+import warnings
 from dataclasses import dataclass
 
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -17,6 +18,7 @@ PASSO_QUALITA = 5
 PASSO_RIDUZIONE = 0.85
 PIXEL_MAX = 50_000_000
 FORMATI_AMMESSI = frozenset({"JPEG", "PNG", "WEBP"})
+_MESSAGGIO_TROPPI_PIXEL = f"immagine con troppi pixel (massimo {PIXEL_MAX})"
 
 
 class ErroreImmagine(ValueError):
@@ -48,20 +50,24 @@ def riduci_immagine(dati: bytes) -> ImmagineRidotta:
 
 def _carica(dati: bytes) -> Image.Image:
     # Pillow, di default, non tollera i file troncati: li segnala con OSError al caricamento.
+    # Il limite è `PIXEL_MAX`, non quello di Pillow: il suo DecompressionBombWarning (sopra
+    # ~89 Mpx) non deve uscire; oltre ~178 Mpx Pillow solleva un errore, stesso messaggio.
     try:
-        immagine = Image.open(io.BytesIO(dati))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+            immagine = Image.open(io.BytesIO(dati))
     except (UnidentifiedImageError, OSError) as errore:
         raise ErroreImmagine("il file non è un'immagine riconoscibile") from errore
     except Image.DecompressionBombError as errore:
-        raise ErroreImmagine("immagine con troppi pixel") from errore
+        raise ErroreImmagine(_MESSAGGIO_TROPPI_PIXEL) from errore
     if immagine.format not in FORMATI_AMMESSI:
         raise ErroreImmagine(f"formato non ammesso: {immagine.format} (solo JPEG, PNG, WebP)")
     if immagine.width * immagine.height > PIXEL_MAX:
-        raise ErroreImmagine(f"immagine con troppi pixel (massimo {PIXEL_MAX})")
+        raise ErroreImmagine(_MESSAGGIO_TROPPI_PIXEL)
     try:
         immagine.load()
     except Image.DecompressionBombError as errore:
-        raise ErroreImmagine("immagine con troppi pixel") from errore
+        raise ErroreImmagine(_MESSAGGIO_TROPPI_PIXEL) from errore
     except (OSError, SyntaxError, ValueError) as errore:
         raise ErroreImmagine("immagine corrotta o troncata") from errore
     return immagine

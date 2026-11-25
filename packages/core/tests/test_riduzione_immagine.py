@@ -5,12 +5,14 @@ Le immagini sono generate al volo con Pillow: mai foto reali (ADR 0011).
 
 import io
 import os
+import warnings
 
 import pytest
 from PIL import Image
 from spesometro_core.riduzione_immagine import (
     LATO_MAX_PX,
     PESO_MAX_BYTE,
+    PIXEL_MAX,
     ErroreImmagine,
     riduci_immagine,
 )
@@ -88,11 +90,12 @@ def test_nessun_metadato_in_uscita_gps_compreso() -> None:
     originale = _codifica(Image.new("RGB", (200, 200), (9, 9, 9)), exif=exif)
     assert len(_apri(originale).getexif()) > 0  # il sorgente li ha davvero
 
-    uscita = _apri(riduci_immagine(originale).jpeg)
+    jpeg = riduci_immagine(originale).jpeg
+    uscita = _apri(jpeg)
 
     assert len(uscita.getexif()) == 0
-    assert b"Exif" not in riduci_immagine(originale).jpeg[:64]
-    assert b"MarcaTelefono" not in riduci_immagine(originale).jpeg
+    assert b"Exif" not in jpeg[:64]
+    assert b"MarcaTelefono" not in jpeg
     assert "exif" not in uscita.info
 
 
@@ -128,9 +131,42 @@ def test_formato_non_ammesso_da_errore_di_dominio() -> None:
         riduci_immagine(gif)
 
 
-def test_numero_di_pixel_abnorme_da_errore_di_dominio() -> None:
-    # PNG a un solo colore: pesa pochi KB ma dichiara molti più pixel del consentito.
-    enorme = _codifica(Image.new("1", (20000, 20000)), "PNG")
+@pytest.mark.parametrize("lato", [8000, 10000, 20000])  # 64, 100 e 400 Mpx: tutti sopra PIXEL_MAX
+def test_numero_di_pixel_abnorme_da_errore_di_dominio_senza_warning(lato: int) -> None:
+    # PNG a un solo colore: pesa pochi KB ma dichiara molti più pixel del consentito. Pillow, da
+    # solo, avviserebbe (DecompressionBombWarning) o solleverebbe un suo errore: qui nessuno.
+    enorme = _codifica(Image.new("1", (lato, lato)), "PNG")
 
-    with pytest.raises(ErroreImmagine, match="troppi pixel"):
-        riduci_immagine(enorme)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(ErroreImmagine) as errore:
+            riduci_immagine(enorme)
+
+    assert str(errore.value) == f"immagine con troppi pixel (massimo {PIXEL_MAX})"
+
+
+def test_jpeg_cmyk_in_ingresso_da_jpeg_rgb_valido() -> None:
+    originale = _codifica(Image.new("CMYK", (300, 200), (0, 255, 255, 0)), "JPEG")
+    assert _apri(originale).mode == "CMYK"
+
+    risultato = riduci_immagine(originale)
+
+    immagine = _apri(risultato.jpeg)
+    assert immagine.format == "JPEG"
+    assert immagine.mode == "RGB"
+    assert immagine.size == (300, 200)
+
+
+def test_webp_animato_da_una_sola_immagine_dal_primo_fotogramma() -> None:
+    primo = Image.new("RGB", (120, 80), (255, 0, 0))
+    secondo = Image.new("RGB", (120, 80), (0, 0, 255))
+    originale = _codifica(primo, "WEBP", save_all=True, append_images=[secondo], duration=100)
+    assert getattr(_apri(originale), "n_frames", 1) == 2
+
+    risultato = riduci_immagine(originale)
+
+    immagine = _apri(risultato.jpeg)
+    assert getattr(immagine, "n_frames", 1) == 1
+    r, _, b = immagine.getpixel((60, 40))
+    assert r > 200
+    assert b < 60

@@ -21,6 +21,8 @@ _CIFRA_OMOCODICA = "[0-9LMNPQRSTUV]"
 
 # Parole chiave che precedono il numero di una tessera: una riga per catena quando arrivano gli
 # scontrini reali (ticket 07). Il formato delle cifre resta uguale per tutte (>= 6 cifre).
+# Un nome di catena tra la parola chiave e il numero (`Carta fedeltà Esselunga 123...`) NON è
+# gestito qui: i formati per catena sono del ticket 07.
 PAROLE_CHIAVE_FIDELITY = (
     "tessera",
     "carta",
@@ -30,7 +32,13 @@ PAROLE_CHIAVE_FIDELITY = (
     "fidelity",
     "fidaty",
 )
-_PREFISSO_NUMERO = r"(?:\s*(?:n|nr|num|numero)\.?)?\s*[:#]?\s*"
+# Dopo la parola chiave: `fedeltà` facoltativa, poi `n`, `nr`, `num`, `numero` (con punto) o `n°`.
+_PREFISSO_NUMERO = (
+    r"(?:\s+fedelt[àa])?(?:\s*(?:(?:n|nr|num|numero)\.|n°|nr|num|numero|n))?\s*[:#]?\s*"
+)
+# Cifre in un solo blocco o a gruppi separati da un solo spazio o trattino (almeno 6 in tutto);
+# un importo che segue (`12,50`) non viene inghiottito.
+_NUMERO_TESSERA = r"(?=\d(?:[ -]?\d){5})\d+(?:[ -]\d+)*(?!\d)(?![.,]\d)"
 
 
 class Regola(NamedTuple):
@@ -63,7 +71,7 @@ REGOLE: tuple[Regola, ...] = (
         FIDELITY,
         re.compile(
             rf"(?P<chiave>{_NON_ALNUM_PRIMA}(?:{'|'.join(map(re.escape, PAROLE_CHIAVE_FIDELITY))})"
-            rf"{_PREFISSO_NUMERO})\d{{6,}}(?!\d)",
+            rf"{_PREFISSO_NUMERO}){_NUMERO_TESSERA}",
             re.IGNORECASE,
         ),
         r"\g<chiave>[FIDELITY]",
@@ -82,16 +90,16 @@ class Redatto:
 def redigi(dati: Json) -> Redatto:
     """Restituisce una copia di `dati` con i dati personali sostituiti; l'ingresso non cambia."""
     conteggi: dict[str, int] = {}
-    return Redatto(_visita(dati, conteggi), conteggi)
+    return Redatto(_redigi_nodo(dati, conteggi), conteggi)
 
 
-def _visita(nodo: Json, conteggi: dict[str, int]) -> Json:
+def _redigi_nodo(nodo: Json, conteggi: dict[str, int]) -> Json:
     if isinstance(nodo, str):
         return _redigi_stringa(nodo, conteggi)
     if isinstance(nodo, dict):
-        return {chiave: _visita(valore, conteggi) for chiave, valore in nodo.items()}
+        return {chiave: _redigi_nodo(valore, conteggi) for chiave, valore in nodo.items()}
     if isinstance(nodo, list):
-        return [_visita(valore, conteggi) for valore in nodo]
+        return [_redigi_nodo(valore, conteggi) for valore in nodo]
     return nodo
 
 
