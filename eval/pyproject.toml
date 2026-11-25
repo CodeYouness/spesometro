@@ -1,0 +1,19 @@
+[project]
+name = "spesometro-eval"
+version = "0.1.0"
+description = "Golden set, scorer e report dell'estrazione. Solo sviluppo e CI: non entra nell'immagine Docker."
+requires-python = "==3.13.*"
+dependencies = ["spesometro-core", "pydantic==2.14.3"]
+
+[project.scripts]
+spesometro-eval = "spesometro_eval.cli:main"
+
+[tool.uv.sources]
+spesometro-core = { workspace = true }
+
+[build-system]
+requires = ["uv_build==0.13.6"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "spesometro_eval"
