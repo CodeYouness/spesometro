@@ -3,10 +3,11 @@ name = "spesometro-api"
 version = "0.1.0"
 description = "App FastAPI: /health e montaggio della UI. Unico processo servito da uvicorn."
 requires-python = "==3.13.*"
-dependencies = ["spesometro-core", "spesometro-web", "fastapi==0.165.0", "starlette==1.10.0", "uvicorn==0.54.0"]
+dependencies = ["spesometro-core", "spesometro-db", "spesometro-web", "fastapi==0.165.0", "starlette==1.10.0", "uvicorn==0.54.0"]
 
 [tool.uv.sources]
 spesometro-core = { workspace = true }
+spesometro-db = { workspace = true }
 spesometro-web = { workspace = true }
 
 [build-system]

@@ -1,0 +1,25 @@
+"""Esiti dell'accesso. Il ticket 03 aggiunge `TroppiTentativi` a `Esito` e a `messaggio_per`."""
+
+import uuid
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Riuscito:
+    """Solo identificativo ed email: mai token."""
+
+    user_id: uuid.UUID
+    email: str
+
+
+@dataclass(frozen=True)
+class CredenzialiErrate:
+    """Credenziali errate o account senza `User`: stesso esito, stesso messaggio."""
+
+
+@dataclass(frozen=True)
+class ServizioNonDisponibile:
+    """Timeout, rete, 5xx, 429 o risposta anomala di Supabase Auth."""
+
+
+type Esito = Riuscito | CredenzialiErrate | ServizioNonDisponibile

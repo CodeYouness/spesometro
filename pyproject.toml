@@ -12,7 +12,8 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest==9.2.0", "ruff==0.17.6", "httpx2==2.16.2", "jsonschema==4.26.0"]
+dev = ["pytest==9.2.0", "ruff==0.17.6", "httpx2==2.16.2", "jsonschema==4.26.0",
+       "pytest-asyncio==1.5.0", "httpx2-pytest==2.0.0"]
 
 [tool.uv]
 package = false
@@ -29,7 +30,10 @@ spesometro-web = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["apps", "packages", "eval"]
-addopts = "--import-mode=importlib -m 'not integration'"
+addopts = "--import-mode=importlib -m 'not integration' -p nicegui.testing.user_plugin"
+main_file = "apps/web/tests/nicegui_main.py"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = ["integration: richiede un Postgres usa e getta in Docker (fuori dal default e dalla CI)"]
 
 [tool.ruff]
