@@ -28,3 +28,16 @@ def test_importare_la_riduzione_immagine_non_carica_moduli_web_o_db() -> None:
 
     assert risultato.returncode == 0, risultato.stderr
     assert risultato.stdout.strip() == "[]"
+
+
+def test_redazione_si_importa_senza_web_ne_db() -> None:
+    """Importare la redazione non carica moduli web o DB."""
+    codice = (
+        "import sys, spesometro_core.redazione;"
+        "vietati = ('nicegui','fastapi','starlette','sqlalchemy','psycopg','httpx','httpx2');"
+        "print([m for m in sys.modules if m.split('.')[0] in vietati])"
+    )
+    risultato = subprocess.run(
+        [sys.executable, "-c", codice], capture_output=True, text=True, check=True
+    )
+    assert risultato.stdout.strip() == "[]"
