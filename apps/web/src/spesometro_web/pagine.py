@@ -1,12 +1,12 @@
 """Pagine `/login` e home. Registrate da `registra_pagine` con le dipendenze iniettate."""
 
 from collections.abc import Awaitable, Callable
+from typing import assert_never
 from urllib.parse import urlsplit
 
 from nicegui import app, ui
 from starlette.responses import RedirectResponse
 
-from spesometro_web.accesso import Orologio
 from spesometro_web.esiti import (
     CredenzialiErrate,
     Esito,
@@ -14,6 +14,7 @@ from spesometro_web.esiti import (
     ServizioNonDisponibile,
     TroppiTentativi,
 )
+from spesometro_web.orologio import Orologio
 from spesometro_web.sessione import CHIAVE_EMAIL, apri_sessione, sessione_presente
 
 type FunzioneAccesso = Callable[[str, str, str], Awaitable[Esito]]
@@ -26,11 +27,15 @@ MESSAGGIO_TROPPI_TENTATIVI = "Troppi tentativi di accesso. Riprova più tardi."
 
 
 def messaggio_per(esito: CredenzialiErrate | ServizioNonDisponibile | TroppiTentativi) -> str:
-    if isinstance(esito, TroppiTentativi):
-        return MESSAGGIO_TROPPI_TENTATIVI
-    if isinstance(esito, ServizioNonDisponibile):
-        return MESSAGGIO_SERVIZIO_NON_DISPONIBILE
-    return MESSAGGIO_CREDENZIALI_ERRATE
+    match esito:
+        case CredenzialiErrate():
+            return MESSAGGIO_CREDENZIALI_ERRATE
+        case ServizioNonDisponibile():
+            return MESSAGGIO_SERVIZIO_NON_DISPONIBILE
+        case TroppiTentativi():
+            return MESSAGGIO_TROPPI_TENTATIVI
+        case _:
+            assert_never(esito)
 
 
 def ritorno_sicuro(destinazione: str) -> str:

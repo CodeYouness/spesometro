@@ -19,6 +19,7 @@ CHIAVE_LOGIN = "login_at"
 def apri_sessione(
     sessione: MutableMapping[str, Any], user_id: uuid.UUID, email: str, adesso: datetime
 ) -> None:
+    sessione.clear()  # nessun residuo di sessioni precedenti
     sessione.update(
         {CHIAVE_USER_ID: str(user_id), CHIAVE_EMAIL: email, CHIAVE_LOGIN: adesso.isoformat()}
     )

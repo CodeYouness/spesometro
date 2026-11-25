@@ -14,6 +14,7 @@ from spesometro_web.esiti import (
 )
 from spesometro_web.limite import LimiteTentativi
 from spesometro_web.supabase_auth import ClienteSupabaseAuth
+from sqlalchemy.exc import OperationalError
 
 URL = "https://prog.supabase.co/auth/v1/token?grant_type=password"
 UID = uuid.UUID("11111111-2222-3333-4444-555555555555")
@@ -212,6 +213,39 @@ async def test_l_utente_non_ammesso_conta_come_fallito(httpx2_mock) -> None:
         assert await _accedi(Ammessi(), limite=limite, orologio=orologio) == CredenzialiErrate()
 
     assert await _accedi(Ammessi(UID), limite=limite, orologio=orologio) == TroppiTentativi()
+
+
+class AmmessoInErrore:
+    def __init__(self, errore: BaseException) -> None:
+        self.errore = errore
+
+    async def __call__(self, user_id: uuid.UUID) -> bool:
+        raise self.errore
+
+
+@pytest.mark.parametrize(
+    "errore",
+    [OperationalError("SELECT 1", {}, OSError("giu")), ConnectionRefusedError("no")],
+    ids=["sqlalchemy", "oserror"],
+)
+async def test_errore_del_database_vale_servizio_non_disponibile_e_non_conta(
+    httpx2_mock, errore: BaseException
+) -> None:
+    limite, orologio = LimiteTentativi(), Orologio()
+    for _ in range(10):
+        httpx2_mock.add_response(method="POST", url=URL, json=RISPOSTA_OK)
+        esito = await _accedi(AmmessoInErrore(errore), limite=limite, orologio=orologio)
+        assert esito == ServizioNonDisponibile()
+
+    httpx2_mock.add_response(method="POST", url=URL, json=RISPOSTA_OK)
+    assert await _accedi(Ammessi(UID), limite=limite, orologio=orologio) == Riuscito(UID, "a@b.it")
+
+
+async def test_un_errore_imprevisto_non_viene_inghiottito(httpx2_mock) -> None:
+    httpx2_mock.add_response(method="POST", url=URL, json=RISPOSTA_OK)
+
+    with pytest.raises(ZeroDivisionError):
+        await _accedi(AmmessoInErrore(ZeroDivisionError()))
 
 
 async def test_il_servizio_non_disponibile_non_conta(httpx2_mock) -> None:

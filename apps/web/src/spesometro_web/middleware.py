@@ -13,7 +13,7 @@ from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 from starlette.types import ASGIApp
 
-from spesometro_web.accesso import Orologio
+from spesometro_web.orologio import Orologio
 from spesometro_web.sessione import istante_login, sessione_presente
 
 # Lista unica dei percorsi pubblici (aggiungere qui, ad es., il webhook Telegram).

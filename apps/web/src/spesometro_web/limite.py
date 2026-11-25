@@ -26,9 +26,16 @@ class LimiteTentativi:
     def bloccato(self, indirizzo: str, adesso: datetime) -> bool:
         return len(self._purga(indirizzo, adesso)) >= MAX_FALLITI
 
+    def _purga_scaduti(self, adesso: datetime) -> None:
+        for indirizzo in list(self._falliti):
+            self._purga(indirizzo, adesso)
+
     def registra_fallito(self, indirizzo: str, adesso: datetime) -> None:
-        self._purga(indirizzo, adesso)
+        self._purga_scaduti(adesso)  # niente indirizzi mai più tornati in memoria
         self._falliti[indirizzo].append(adesso)
+
+    def indirizzi_tracciati(self) -> set[str]:
+        return set(self._falliti)
 
     def azzera(self, indirizzo: str) -> None:
         self._falliti.pop(indirizzo, None)

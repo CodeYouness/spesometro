@@ -1,18 +1,12 @@
 """UI NiceGUI di Spesometro."""
 
-from datetime import UTC, datetime
-
 from fastapi import FastAPI
 from nicegui import app as nicegui_app
 from nicegui import ui
 
-from spesometro_web.accesso import Orologio
 from spesometro_web.middleware import AuthMiddleware
+from spesometro_web.orologio import Orologio, orologio_utc
 from spesometro_web.pagine import FunzioneAccesso, registra_pagine
-
-
-def orologio_utc() -> datetime:
-    return datetime.now(UTC)
 
 
 def mount_ui(
