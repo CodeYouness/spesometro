@@ -22,8 +22,8 @@ from spesometro_core import (
     OffertaVolantino,
     PaginaVolantino,
     RigaScontrino,
-    Scontrino,
     ScontoScontrino,
+    Scontrino,
 )
 
 _PUNTEGGIATURA = re.compile(r"[^\w\s]|_")
@@ -35,7 +35,7 @@ def normalizza(testo: str) -> str:
 
 
 def chiave_testo(testo: str) -> str:
-    """Chiave di allineamento: il testo normalizzato, o il grezzo se la normalizzazione lo svuota."""
+    """Chiave di allineamento: testo normalizzato, o grezzo se la normalizzazione lo svuota."""
     return normalizza(testo) or testo
 
 
@@ -237,8 +237,9 @@ def accoppia_offerte(
     """Coppie (indice annotata, indice estratta) uno a uno, in numero massimo.
 
     Una coppia è ammessa se il prezzo a confezione è identico e la somiglianza del nome è almeno
-    `soglia`; con `solo_identiche` anche tutti i campi devono coincidere. Per ogni estratta si preferiscono le annotate identiche, poi le più simili; un
-    cammino aumentante riassegna le coppie quando serve ad accoppiarne di più.
+    `soglia`; con `solo_identiche` anche tutti i campi devono coincidere. Per ogni estratta si
+    preferiscono le annotate identiche, poi le più simili; un cammino aumentante riassegna le
+    coppie quando serve ad accoppiarne di più.
     """
     candidate: list[list[int]] = []
     for estratta in estratte:

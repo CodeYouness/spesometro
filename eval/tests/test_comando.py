@@ -120,6 +120,42 @@ def test_annotazione_non_valida_nomina_file_e_campo(
     assert "buona.json" not in err
 
 
+def test_elenca_tutti_i_file_non_validi_non_solo_il_primo(
+    cartelle: Cartelle, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cartelle.testata()
+    cartelle.annotazione("buona")
+    cartelle.annotazione("rotta1", totale="-5")
+    cartelle.annotazione("rotta2", catena="inesistente")
+    cartelle.predizione("buona")
+
+    assert main(cartelle.argomenti("report")) != 0
+
+    err = capsys.readouterr().err
+    assert "rotta1.json" in err
+    assert "totale" in err
+    assert "rotta2.json" in err
+    assert "catena" in err
+    assert "buona.json" not in err
+
+
+def test_elenca_tutte_le_predizioni_non_valide(
+    cartelle: Cartelle, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cartelle.testata()
+    cartelle.annotazione()
+    cartelle.predizione("a", modello=None)
+    cartelle.predizione("b", versione_prompt=None)
+
+    assert main(cartelle.argomenti("report")) != 0
+
+    err = capsys.readouterr().err
+    assert "a.json" in err
+    assert "modello" in err
+    assert "b.json" in err
+    assert "versione_prompt" in err
+
+
 def test_immagine_mancante_e_solo_un_avviso(
     cartelle: Cartelle, capsys: pytest.CaptureFixture[str]
 ) -> None:

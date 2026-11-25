@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
@@ -54,21 +55,44 @@ def _leggi[M: BaseModel](percorso: Path, modello: type[M]) -> M:
         raise ErroreGolden(f"{percorso}: {problemi}") from e
 
 
-def carica_golden(golden: Path, data: Path) -> GoldenSet:
-    """Carica testata e annotazioni; immagini mancanti e sha256 diversi sono avvisi."""
-    testata_file = golden / NOME_TESTATA
-    if not testata_file.is_file():
-        raise ErroreGolden(f"{testata_file}: testata mancante (servono versione e data)")
-    testata = _leggi(testata_file, Testata)
+def _leggi_tutti[M: BaseModel](
+    file: Sequence[Path], modello: type[M], errori: list[str]
+) -> list[tuple[Path, M]]:
+    """Legge ogni file; quelli non validi finiscono in `errori`, gli altri nel risultato."""
+    letti: list[tuple[Path, M]] = []
+    for f in file:
+        try:
+            letti.append((f, _leggi(f, modello)))
+        except ErroreGolden as e:
+            errori.append(str(e))
+    return letti
 
-    scontrini = [
-        (f, _leggi(f, AnnotazioneScontrino))
-        for f in sorted((golden / CARTELLA_SCONTRINI).glob("*.json"))
-    ]
-    pagine = [
-        (f, _leggi(f, AnnotazionePagina))
-        for f in sorted((golden / CARTELLA_VOLANTINI).glob("*.json"))
-    ]
+
+def _fallisci_se(errori: list[str]) -> None:
+    if errori:
+        raise ErroreGolden("\n".join(errori))
+
+
+def carica_golden(golden: Path, data: Path) -> GoldenSet:
+    """Carica testata e annotazioni; immagini mancanti e sha256 diversi sono avvisi.
+
+    Se uno o più file non sono validi, l'errore li elenca tutti, ciascuno col suo campo.
+    """
+    errori: list[str] = []
+    testata_file = golden / NOME_TESTATA
+    if testata_file.is_file():
+        letta = _leggi_tutti([testata_file], Testata, errori)
+    else:
+        letta = []
+        errori.append(f"{testata_file}: testata mancante (servono versione e data)")
+    scontrini = _leggi_tutti(
+        sorted((golden / CARTELLA_SCONTRINI).glob("*.json")), AnnotazioneScontrino, errori
+    )
+    pagine = _leggi_tutti(
+        sorted((golden / CARTELLA_VOLANTINI).glob("*.json")), AnnotazionePagina, errori
+    )
+    _fallisci_se(errori)
+    testata = letta[0][1]
     avvisi = [
         f"{f}: immagine mancante in {data / a.immagine}"
         for f, a in [*scontrini, *pagine]
@@ -91,13 +115,19 @@ def _trova_manifest(data: Path, immagine: str) -> Path | None:
 
 
 def _sha256_da_manifest(manifest: Path, immagine: str, data: Path) -> str | None:
-    """Impronta della pagina secondo il manifest (voci con `cartella` e `pagine[].file`)."""
-    voci = json.loads(manifest.read_text())
+    """Impronta della pagina secondo il manifest (voci con `cartella` e `pagine[].file`).
+
+    `None` se la pagina non compare; `ErroreGolden` se il manifest non si legge o non ha la forma
+    attesa.
+    """
     base = PurePosixPath(*manifest.parent.relative_to(data).parts)
-    for voce in voci:
-        for pagina in voce.get("pagine", []):
-            if str(base / voce["cartella"] / pagina["file"]) == immagine:
-                return pagina["sha256"]
+    try:
+        for voce in json.loads(manifest.read_text()):
+            for pagina in voce.get("pagine", []):
+                if str(base / voce["cartella"] / pagina["file"]) == immagine:
+                    return pagina["sha256"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError) as e:
+        raise ErroreGolden(f"{manifest}: non leggibile come manifest dei volantini") from e
     return None
 
 
@@ -107,7 +137,7 @@ def _controlla_sha256(file: Path, a: AnnotazionePagina, data: Path) -> list[str]
         return [f"{file}: {NOME_MANIFEST} assente, sha256 non verificato"]
     try:
         atteso = _sha256_da_manifest(manifest, a.immagine, data)
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+    except ErroreGolden:
         return [f"{file}: {manifest} non leggibile, sha256 non verificato"]
     if atteso is None:
         return [f"{file}: {a.immagine} non compare in {manifest}, sha256 non verificato"]
@@ -120,12 +150,13 @@ def carica_predizioni(cartella: Path) -> Predizioni:
     """Una predizione di pagina ha `contenuto.offerte`, una di scontrino `contenuto.righe`."""
     if not cartella.is_dir():
         raise ErroreGolden(f"{cartella}: cartella delle predizioni mancante")
-    risultato = Predizioni()
-    for f in sorted(cartella.glob("*.json")):
-        if _e_pagina(f):
-            risultato.pagine.append((f, _leggi(f, PredizionePagina)))
-        else:
-            risultato.scontrini.append((f, _leggi(f, PredizioneScontrino)))
+    file = sorted(cartella.glob("*.json"))
+    errori: list[str] = []
+    risultato = Predizioni(
+        scontrini=_leggi_tutti([f for f in file if not _e_pagina(f)], PredizioneScontrino, errori),
+        pagine=_leggi_tutti([f for f in file if _e_pagina(f)], PredizionePagina, errori),
+    )
+    _fallisci_se(errori)
     return risultato
 
 
@@ -144,10 +175,7 @@ def sha256_pagina(data: Path, immagine: str) -> str:
         return hashlib.sha256(file.read_bytes()).hexdigest()
     manifest = _trova_manifest(data, immagine)
     if manifest is not None:
-        try:
-            atteso = _sha256_da_manifest(manifest, immagine, data)
-        except (OSError, ValueError, KeyError, TypeError, AttributeError):
-            atteso = None
+        atteso = _sha256_da_manifest(manifest, immagine, data)
         if atteso is not None:
             return atteso
     raise ErroreGolden(

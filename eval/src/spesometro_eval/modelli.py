@@ -18,19 +18,23 @@ class Testata(_Formato):
     data: date
 
 
+class _DatiPredizione(_Formato):
+    """Campi comuni a ogni predizione: chi l'ha prodotta, con quale prompt, a che costo."""
+
+    modello: str = Field(min_length=1)
+    versione_prompt: str = Field(min_length=1)
+    costo_usd: Decimal | None = None
+    tempo_s: float | None = None
+
+
 class AnnotazioneScontrino(_Formato):
     immagine: str = Field(min_length=1)
     """Percorso relativo dentro `data/`."""
     contenuto: Scontrino
 
 
-class PredizioneScontrino(AnnotazioneScontrino):
+class PredizioneScontrino(AnnotazioneScontrino, _DatiPredizione):
     """Un'annotazione più modello, versione del prompt, costo e tempo."""
-
-    modello: str = Field(min_length=1)
-    versione_prompt: str = Field(min_length=1)
-    costo_usd: Decimal | None = None
-    tempo_s: float | None = None
 
 
 class AnnotazionePagina(_Formato):
@@ -43,10 +47,5 @@ class AnnotazionePagina(_Formato):
     contenuto: PaginaVolantino
 
 
-class PredizionePagina(AnnotazionePagina):
+class PredizionePagina(AnnotazionePagina, _DatiPredizione):
     """Un'annotazione di pagina più modello, versione del prompt, costo e tempo."""
-
-    modello: str = Field(min_length=1)
-    versione_prompt: str = Field(min_length=1)
-    costo_usd: Decimal | None = None
-    tempo_s: float | None = None
