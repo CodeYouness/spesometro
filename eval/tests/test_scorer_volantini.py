@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 from spesometro_core import PaginaVolantino
-from spesometro_eval.scorer import valuta_volantini
+from spesometro_eval.scorer import ConteggiOfferte, valuta_volantini
 
 
 def offerta(testo: str, prezzo: str, **extra: Any) -> dict[str, Any]:
@@ -134,3 +134,31 @@ def test_aggregazione_per_pagina_per_volantino_e_totale() -> None:
     assert (totale.estratte, totale.annotate, totale.corrette_gate) == (5, 5, 4)
     assert totale.precision_gate == pytest.approx(0.8)
     assert totale.recall_gate == pytest.approx(0.8)
+
+
+def test_pagina_senza_predizione_conta_come_estrazione_vuota() -> None:
+    annotata = pagina(offerta("Latte", "1.00"), offerta("Pane", "2.00"))
+
+    m = valuta_volantini([(P1, annotata, annotata), (P2, annotata, None)]).totale
+
+    assert (m.estratte, m.annotate, m.corrette_gate) == (2, 4, 2)
+    assert m.recall_gate == 0.5
+    assert m.precision_gate == 1.0
+
+
+def test_severo_e_un_accoppiamento_massimo_a_parte() -> None:
+    # Il gate ammette entrambe le coppie incrociate (2 coppie, nessuna identica); ma la prima
+    # estratta è identica alla prima annotata: il severo massimo è 1.
+    annotata = pagina(offerta("Yogurt greco bianco", "1.00"), offerta("Yogurt greco", "1.00"))
+    predetta = pagina(offerta("Yogurt greco bianco", "1.00"), offerta("Greco bianco", "1.00"))
+
+    m = valuta_volantini([(P1, annotata, predetta)], soglia=0.6).totale
+
+    assert m.corrette_gate == 2
+    assert m.corrette_severo == 1
+
+
+def test_esito_del_gate_dai_conteggi() -> None:
+    assert ConteggiOfferte(estratte=10, corrette_gate=7).esito_gate is True
+    assert ConteggiOfferte(estratte=10, corrette_gate=6).esito_gate is False
+    assert ConteggiOfferte().esito_gate is None

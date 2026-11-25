@@ -87,3 +87,41 @@ def test_aggrega_su_piu_scontrini() -> None:
     assert m.n_scontrini == 2
     assert m.accuratezza["prezzo"] == 0.5
     assert m.cifre_errate == pytest.approx(1 / 8)
+
+
+def test_predizione_mancante_conta_come_estrazione_vuota() -> None:
+    annotato = scontrino(
+        [riga("A", "1.00"), riga("B", "2.00")],
+        data="2026-11-02",
+        sconti_scontrino=[{"descrizione": "Buono", "importo": "1.00"}],
+    )
+
+    m = valuta_scontrini([(annotato, annotato), (annotato, None)])
+
+    # Il secondo scontrino manca: tutti i campi di testata sbagliati, 2 righe mancanti.
+    assert m.n_scontrini == 2
+    assert m.accuratezza["catena"] == 0.5
+    assert m.accuratezza["ora"] == 0.5
+    assert m.accuratezza["prezzo"] == 0.5  # 2 giuste su 4 righe annotate
+    assert m.accuratezza["sconti_scontrino.importo"] == 0.5
+    # Numerici per scontrino: totale 1 + 2 righe x 3 + 1 sconto = 8; sbagliati solo nel mancante.
+    assert m.cifre_errate == pytest.approx(8 / 16)
+
+
+def test_righe_con_testo_normalizzato_vuoto_non_si_allineano_tra_loro() -> None:
+    annotato = scontrino([riga("***", "1.00")])
+    predetto = scontrino([riga("---", "1.00")])
+
+    m = valuta_scontrini([(annotato, predetto)])
+
+    assert m.accuratezza["prezzo"] == 0.0
+    # Numerici: totale 1 + riga 3 + riga inventata 3 = 7; sbagliati: 3 mancanti + 3 inventati.
+    assert m.cifre_errate == pytest.approx(6 / 7)
+
+
+def test_righe_identiche_con_testo_normalizzato_vuoto_si_allineano() -> None:
+    annotato = scontrino([riga("***", "1.00")])
+
+    m = valuta_scontrini([(annotato, annotato)])
+
+    assert m.accuratezza["prezzo"] == 1.0

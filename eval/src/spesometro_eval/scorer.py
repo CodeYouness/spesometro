@@ -4,7 +4,11 @@ Volantini: dentro la pagina, accoppiamento uno a uno per `prezzo_confezione` ide
 e somiglianza del nome normalizzato sopra soglia (ADR 0015).
 
 Scontrini: le righe si allineano per sequenza (sottosequenza comune più lunga) sul testo
-normalizzato; una riga saltata è una riga mancante e non sfalsa le successive.
+normalizzato (il testo grezzo se il normalizzato è vuoto, per non allineare `***` con `---`);
+una riga saltata è una riga mancante e non sfalsa le successive.
+
+Un'annotazione senza predizione (`None`) vale come estrazione vuota: tutto ciò che è annotato
+risulta mancante.
 """
 
 import posixpath
@@ -14,7 +18,13 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
-from spesometro_core import OffertaVolantino, PaginaVolantino, Scontrino
+from spesometro_core import (
+    OffertaVolantino,
+    PaginaVolantino,
+    RigaScontrino,
+    Scontrino,
+    ScontoScontrino,
+)
 
 _PUNTEGGIATURA = re.compile(r"[^\w\s]|_")
 
@@ -24,26 +34,34 @@ def normalizza(testo: str) -> str:
     return " ".join(_PUNTEGGIATURA.sub("", testo.casefold()).split())
 
 
+def chiave_testo(testo: str) -> str:
+    """Chiave di allineamento: il testo normalizzato, o il grezzo se la normalizzazione lo svuota."""
+    return normalizza(testo) or testo
+
+
 def allinea[T](
     annotati: Sequence[T], predetti: Sequence[T], chiave: Callable[[T], str]
 ) -> list[tuple[int, int]]:
     """Coppie (indice annotato, indice predetto) della sottosequenza comune più lunga."""
-    a = [chiave(x) for x in annotati]
-    p = [chiave(x) for x in predetti]
-    lung = [[0] * (len(p) + 1) for _ in range(len(a) + 1)]
-    for i in range(len(a) - 1, -1, -1):
-        for j in range(len(p) - 1, -1, -1):
-            lung[i][j] = (
-                lung[i + 1][j + 1] + 1 if a[i] == p[j] else max(lung[i + 1][j], lung[i][j + 1])
+    chiavi_annotati = [chiave(x) for x in annotati]
+    chiavi_predetti = [chiave(x) for x in predetti]
+    # lunghezza_da[i][j]: lunghezza della sottosequenza comune di chiavi_annotati[i:] e [j:].
+    lunghezza_da = [[0] * (len(chiavi_predetti) + 1) for _ in range(len(chiavi_annotati) + 1)]
+    for i in range(len(chiavi_annotati) - 1, -1, -1):
+        for j in range(len(chiavi_predetti) - 1, -1, -1):
+            lunghezza_da[i][j] = (
+                lunghezza_da[i + 1][j + 1] + 1
+                if chiavi_annotati[i] == chiavi_predetti[j]
+                else max(lunghezza_da[i + 1][j], lunghezza_da[i][j + 1])
             )
     coppie: list[tuple[int, int]] = []
     i = j = 0
-    while i < len(a) and j < len(p):
-        if a[i] == p[j]:
+    while i < len(chiavi_annotati) and j < len(chiavi_predetti):
+        if chiavi_annotati[i] == chiavi_predetti[j]:
             coppie.append((i, j))
             i += 1
             j += 1
-        elif lung[i + 1][j] >= lung[i][j + 1]:
+        elif lunghezza_da[i + 1][j] >= lunghezza_da[i][j + 1]:
             i += 1
         else:
             j += 1
@@ -73,57 +91,71 @@ _CAMPI_RIGA = ("testo_grezzo", "quantita", "prezzo", "sconto")
 _NUMERICI_RIGA = ("quantita", "prezzo", "sconto")
 
 
-def valuta_scontrini(coppie: Sequence[tuple[Scontrino, Scontrino]]) -> MetricheScontrini:
-    """Coppie (annotato, predetto) → accuratezza per campo e tasso di cifre errate."""
-    m = MetricheScontrini()
+def valuta_scontrini(
+    coppie: Sequence[tuple[Scontrino, Scontrino | None]],
+) -> MetricheScontrini:
+    """Coppie (annotato, predetto) → accuratezza per campo e tasso di cifre errate.
+
+    Un predetto `None` è un'estrazione vuota: testata sbagliata, righe e sconti tutti mancanti.
+    """
+    metriche = MetricheScontrini()
     for annotato, predetto in coppie:
-        m.n_scontrini += 1
-        _testata(m, annotato, predetto)
-        _righe(m, annotato, predetto)
-        _sconti(m, annotato, predetto)
-    return m
+        metriche.n_scontrini += 1
+        _testata(metriche, annotato, predetto)
+        _righe(metriche, annotato, predetto.righe if predetto else [])
+        _sconti(metriche, annotato, predetto.sconti_scontrino if predetto else [])
+    return metriche
 
 
-def _conta(m: MetricheScontrini, campo: str, giusto: bool, *, numerico: bool = False) -> None:
-    m.totali[campo] += 1
-    m.corretti[campo] += giusto
+def _registra_campo(
+    metriche: MetricheScontrini, campo: str, giusto: bool, *, numerico: bool = False
+) -> None:
+    metriche.totali[campo] += 1
+    metriche.corretti[campo] += giusto
     if numerico:
-        m.cifre_totali += 1
-        m.cifre_sbagliate += not giusto
+        metriche.cifre_totali += 1
+        metriche.cifre_sbagliate += not giusto
 
 
-def _testata(m: MetricheScontrini, annotato: Scontrino, predetto: Scontrino) -> None:
-    _conta(m, "catena", annotato.catena == predetto.catena)
-    _conta(m, "data", annotato.data == predetto.data)
-    _conta(m, "ora", annotato.ora == predetto.ora)
-    _conta(m, "totale", annotato.totale == predetto.totale, numerico=True)
+def _testata(metriche: MetricheScontrini, annotato: Scontrino, predetto: Scontrino | None) -> None:
+    mancante = predetto is None
+    _registra_campo(metriche, "catena", not mancante and annotato.catena == predetto.catena)
+    _registra_campo(metriche, "data", not mancante and annotato.data == predetto.data)
+    _registra_campo(metriche, "ora", not mancante and annotato.ora == predetto.ora)
+    _registra_campo(
+        metriche, "totale", not mancante and annotato.totale == predetto.totale, numerico=True
+    )
 
 
-def _righe(m: MetricheScontrini, annotato: Scontrino, predetto: Scontrino) -> None:
-    coppie = allinea(annotato.righe, predetto.righe, lambda r: normalizza(r.testo_grezzo))
+def _righe(
+    metriche: MetricheScontrini, annotato: Scontrino, righe_predette: list[RigaScontrino]
+) -> None:
+    coppie = allinea(annotato.righe, righe_predette, lambda r: chiave_testo(r.testo_grezzo))
     abbinate = dict(coppie)
     for i, riga in enumerate(annotato.righe):
-        trovata = predetto.righe[abbinate[i]] if i in abbinate else None
+        trovata = righe_predette[abbinate[i]] if i in abbinate else None
         for campo in _CAMPI_RIGA:
             giusto = trovata is not None and getattr(riga, campo) == getattr(trovata, campo)
-            _conta(m, campo, giusto, numerico=campo in _NUMERICI_RIGA)
-    inventate = len(predetto.righe) - len(coppie)
-    m.cifre_totali += inventate * len(_NUMERICI_RIGA)
-    m.cifre_sbagliate += inventate * len(_NUMERICI_RIGA)
+            _registra_campo(metriche, campo, giusto, numerico=campo in _NUMERICI_RIGA)
+    inventate = len(righe_predette) - len(coppie)
+    metriche.cifre_totali += inventate * len(_NUMERICI_RIGA)
+    metriche.cifre_sbagliate += inventate * len(_NUMERICI_RIGA)
 
 
-def _sconti(m: MetricheScontrini, annotato: Scontrino, predetto: Scontrino) -> None:
+def _sconti(
+    metriche: MetricheScontrini, annotato: Scontrino, sconti_predetti: list[ScontoScontrino]
+) -> None:
     coppie = allinea(
-        annotato.sconti_scontrino, predetto.sconti_scontrino, lambda s: normalizza(s.descrizione)
+        annotato.sconti_scontrino, sconti_predetti, lambda s: chiave_testo(s.descrizione)
     )
     abbinate = dict(coppie)
     for i, sconto in enumerate(annotato.sconti_scontrino):
-        trovato = predetto.sconti_scontrino[abbinate[i]] if i in abbinate else None
+        trovato = sconti_predetti[abbinate[i]] if i in abbinate else None
         giusto = trovato is not None and sconto.importo == trovato.importo
-        _conta(m, "sconti_scontrino.importo", giusto, numerico=True)
-    inventati = len(predetto.sconti_scontrino) - len(coppie)
-    m.cifre_totali += inventati
-    m.cifre_sbagliate += inventati
+        _registra_campo(metriche, "sconti_scontrino.importo", giusto, numerico=True)
+    inventati = len(sconti_predetti) - len(coppie)
+    metriche.cifre_totali += inventati
+    metriche.cifre_sbagliate += inventati
 
 
 SOGLIA_SOMIGLIANZA = 0.6
@@ -132,7 +164,11 @@ SOGLIA_SOMIGLIANZA = 0.6
 
 def somiglianza(a: str, b: str) -> float:
     """Somiglianza dei nomi normalizzati, da 0 a 1 (rapporto di `difflib.SequenceMatcher`)."""
-    return SequenceMatcher(None, normalizza(a), normalizza(b)).ratio()
+    return SequenceMatcher(None, chiave_testo(a), chiave_testo(b)).ratio()
+
+
+SOGLIA_GATE_PRECISION = 0.7
+"""Gate di S1 (SPEC §3.2): precision delle offerte, criterio del gate, almeno 70%."""
 
 
 @dataclass(frozen=True)
@@ -142,7 +178,7 @@ class ConteggiOfferte:
     corrette_gate: int = 0
     """Coppie col criterio del gate: prezzo identico al centesimo e nome abbastanza simile."""
     corrette_severo: int = 0
-    """Tra le coppie del gate, quelle in cui tutti i campi coincidono (solo informativo)."""
+    """Accoppiamento massimo a parte, sulle sole coppie del gate con tutti i campi uguali."""
 
     @staticmethod
     def _quota(corrette: int, totale: int) -> float | None:
@@ -155,6 +191,12 @@ class ConteggiOfferte:
     @property
     def recall_gate(self) -> float | None:
         return self._quota(self.corrette_gate, self.annotate)
+
+    @property
+    def esito_gate(self) -> bool | None:
+        """`True` se la precision del gate raggiunge la soglia di S1; `None` senza estratte."""
+        precision = self.precision_gate
+        return None if precision is None else precision >= SOGLIA_GATE_PRECISION
 
     @property
     def precision_severo(self) -> float | None:
@@ -189,22 +231,25 @@ def accoppia_offerte(
     annotate: Sequence[OffertaVolantino],
     estratte: Sequence[OffertaVolantino],
     soglia: float = SOGLIA_SOMIGLIANZA,
+    *,
+    solo_identiche: bool = False,
 ) -> list[tuple[int, int]]:
     """Coppie (indice annotata, indice estratta) uno a uno, in numero massimo.
 
     Una coppia è ammessa se il prezzo a confezione è identico e la somiglianza del nome è almeno
-    `soglia`. Per ogni estratta si preferiscono le annotate identiche, poi le più simili; un
+    `soglia`; con `solo_identiche` anche tutti i campi devono coincidere. Per ogni estratta si preferiscono le annotate identiche, poi le più simili; un
     cammino aumentante riassegna le coppie quando serve ad accoppiarne di più.
     """
     candidate: list[list[int]] = []
-    for e in estratte:
+    for estratta in estratte:
         ammesse = [
-            (i, somiglianza(a.testo_grezzo, e.testo_grezzo))
+            (i, somiglianza(a.testo_grezzo, estratta.testo_grezzo))
             for i, a in enumerate(annotate)
-            if a.prezzo_confezione == e.prezzo_confezione
+            if a.prezzo_confezione == estratta.prezzo_confezione
+            and (not solo_identiche or a == estratta)
         ]
         ammesse = [(i, s) for i, s in ammesse if s >= soglia]
-        ammesse.sort(key=lambda x: (annotate[x[0]] != e, -x[1], x[0]))
+        ammesse.sort(key=lambda x: (annotate[x[0]] != estratta, -x[1], x[0]))
         candidate.append([i for i, _ in ammesse])
 
     proprietario: dict[int, int] = {}  # indice annotata -> indice estratta
@@ -227,23 +272,26 @@ def accoppia_offerte(
 def _conteggi_pagina(
     annotata: PaginaVolantino, predetta: PaginaVolantino, soglia: float
 ) -> ConteggiOfferte:
-    coppie = accoppia_offerte(annotata.offerte, predetta.offerte, soglia)
-    identiche = sum(annotata.offerte[i] == predetta.offerte[j] for i, j in coppie)
-    return ConteggiOfferte(len(predetta.offerte), len(annotata.offerte), len(coppie), identiche)
+    gate = accoppia_offerte(annotata.offerte, predetta.offerte, soglia)
+    severo = accoppia_offerte(annotata.offerte, predetta.offerte, soglia, solo_identiche=True)
+    return ConteggiOfferte(len(predetta.offerte), len(annotata.offerte), len(gate), len(severo))
 
 
 def valuta_volantini(
-    pagine: Sequence[tuple[str, PaginaVolantino, PaginaVolantino]],
+    pagine: Sequence[tuple[str, PaginaVolantino, PaginaVolantino | None]],
     soglia: float = SOGLIA_SOMIGLIANZA,
 ) -> MetricheVolantini:
-    """Terne (immagine, annotata, predetta) → conteggi per pagina, per volantino e in totale."""
-    m = MetricheVolantini()
+    """Terne (immagine, annotata, predetta) → conteggi per pagina, per volantino e in totale.
+
+    Una predetta `None` è una pagina estratta vuota: tutte le offerte annotate risultano mancanti.
+    """
+    metriche = MetricheVolantini()
     per_volantino: dict[str, ConteggiOfferte] = {}
     for immagine, annotata, predetta in pagine:
-        c = _conteggi_pagina(annotata, predetta, soglia)
-        m.per_pagina.append((immagine, c))
-        chiave = volantino_di(immagine)
-        per_volantino[chiave] = per_volantino.get(chiave, ConteggiOfferte()) + c
-        m.totale += c
-    m.per_volantino = sorted(per_volantino.items())
-    return m
+        conteggi = _conteggi_pagina(annotata, predetta or PaginaVolantino(offerte=[]), soglia)
+        metriche.per_pagina.append((immagine, conteggi))
+        volantino = volantino_di(immagine)
+        per_volantino[volantino] = per_volantino.get(volantino, ConteggiOfferte()) + conteggi
+        metriche.totale += conteggi
+    metriche.per_volantino = sorted(per_volantino.items())
+    return metriche
