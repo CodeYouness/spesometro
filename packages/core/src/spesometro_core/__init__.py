@@ -24,8 +24,16 @@ from spesometro_core.scontrino import (
     discrepanza_somma_totale,
     json_schema_scontrino,
 )
+from spesometro_core.volantino import (
+    OffertaVolantino,
+    PaginaVolantino,
+    json_schema_pagina_volantino,
+)
 
 __all__ = [
+    "OffertaVolantino",
+    "PaginaVolantino",
+    "json_schema_pagina_volantino",
     "RigaScontrino",
     "Scontrino",
     "ScontoScontrino",
