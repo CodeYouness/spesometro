@@ -1,4 +1,4 @@
-"""Esiti dell'accesso. Il ticket 03 aggiunge `TroppiTentativi` a `Esito` e a `messaggio_per`."""
+"""Esiti dell'accesso."""
 
 import uuid
 from dataclasses import dataclass
@@ -22,4 +22,9 @@ class ServizioNonDisponibile:
     """Timeout, rete, 5xx, 429 o risposta anomala di Supabase Auth."""
 
 
-type Esito = Riuscito | CredenzialiErrate | ServizioNonDisponibile
+@dataclass(frozen=True)
+class TroppiTentativi:
+    """Limite per indirizzo raggiunto: Supabase non viene chiamato."""
+
+
+type Esito = Riuscito | CredenzialiErrate | ServizioNonDisponibile | TroppiTentativi

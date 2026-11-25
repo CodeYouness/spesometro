@@ -5,6 +5,7 @@ from spesometro_db import create_engine, create_session_factory, utente_ammesso
 from spesometro_web import mount_ui, orologio_utc
 from spesometro_web.accesso import accedi
 from spesometro_web.config import Impostazioni
+from spesometro_web.limite import LimiteTentativi
 from spesometro_web.supabase_auth import ClienteSupabaseAuth
 
 # Senza una variabile obbligatoria l'app non parte e l'errore la nomina.
@@ -33,6 +34,7 @@ mount_ui(
         ),
         ammesso=partial(utente_ammesso, _session_factory),
         orologio=orologio_utc,
+        limite=LimiteTentativi(),  # una sola istanza: stato del processo
     ),
     orologio=orologio_utc,
 )
