@@ -1,0 +1,19 @@
+{
+  "immagine": "esempi/scontrino-sintetico.jpg",
+  "contenuto": {
+    "catena": "lidl",
+    "data": "2026-11-02",
+    "ora": "18:45",
+    "totale": "10.09",
+    "righe": [
+      {"testo_grezzo": "LATTE PS UHT 1L", "quantita": "2", "prezzo": "2.58"},
+      {"testo_grezzo": "BANANE", "quantita": "1.250", "prezzo": "2.31", "sconto": "0.31"},
+      {"testo_grezzo": "PASTA SPAGHETTI 500G", "quantita": "3", "prezzo": "2.97"},
+      {"testo_grezzo": "VUOTO A RENDERE", "quantita": "1", "prezzo": "-0.50"},
+      {"testo_grezzo": "YOGURT BIANCO 2X125G", "quantita": "1", "prezzo": "3.54"}
+    ],
+    "sconti_scontrino": [
+      {"descrizione": "BUONO SCONTO ESEMPIO", "importo": "0.50"}
+    ]
+  }
+}
