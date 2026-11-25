@@ -1,7 +1,7 @@
 """Pagine /login e home con l'utente di test di NiceGUI (montaggio `ui.run_with`)."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 
 import pytest
@@ -10,6 +10,7 @@ from nicegui.testing import User
 from spesometro_web.sessione import utente_corrente_id
 
 UID = uuid.UUID("11111111-2222-3333-4444-555555555555")
+ADESSO = datetime(2026, 11, 25, 12, 0, tzinfo=UTC)  # come in nicegui_main.py
 
 
 async def _entra(user: User, password: str, email: str = "a@b.it") -> None:
@@ -111,3 +112,42 @@ async def test_uscita_svuota_la_sessione_e_porta_al_login(user: User) -> None:
         assert dict(app.storage.user) == {}
     await user.open("/")
     await user.should_see(marker="accedi")
+
+
+async def _entra_e_sposta_login(user: User, giorni_fa: float) -> None:
+    await user.open("/login")
+    await _entra(user, "giusta")
+    await user.should_see(marker="email-utente")
+    with user:
+        app.storage.user["login_at"] = (ADESSO - timedelta(days=giorni_fa)).isoformat()
+
+
+async def test_sessione_di_29_giorni_vale_ancora(user: User) -> None:
+    await _entra_e_sposta_login(user, 29)
+
+    await user.open("/altra")
+
+    await user.should_see(marker="pagina-altra")
+
+
+async def test_sessione_di_oltre_30_giorni_rimanda_al_login_e_viene_svuotata(user: User) -> None:
+    await _entra_e_sposta_login(user, 30.001)
+
+    await user.open("/altra?x=1")
+
+    await user.should_see(marker="accedi")
+    with user:
+        assert dict(app.storage.user) == {}
+    await user.find(marker="email").type("a@b.it")
+    user.find(marker="password").type("giusta")
+    user.find(marker="accedi").click()
+    await user.should_see(marker="pagina-altra")
+
+
+async def test_login_con_sessione_scaduta_mostra_il_form(user: User) -> None:
+    await _entra_e_sposta_login(user, 31)
+
+    await user.open("/login")
+
+    await user.should_see(marker="accedi")
+    await user.should_not_see(marker="email-utente")
