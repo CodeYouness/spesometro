@@ -17,8 +17,20 @@ from spesometro_core.enumerazioni import (
     UnitaBase,
     UnitaDiVendita,
 )
+from spesometro_core.scontrino import (
+    RigaScontrino,
+    ScontoScontrino,
+    Scontrino,
+    discrepanza_somma_totale,
+    json_schema_scontrino,
+)
 
 __all__ = [
+    "RigaScontrino",
+    "Scontrino",
+    "ScontoScontrino",
+    "discrepanza_somma_totale",
+    "json_schema_scontrino",
     "Attributo",
     "Catena",
     "CondizioneOfferta",

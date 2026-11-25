@@ -3,25 +3,32 @@ name = "spesometro"
 version = "0.1.0"
 description = "Assistente per la spesa: scontrini, volantini, magazzino e lista ottimizzata."
 requires-python = "==3.13.*"
-dependencies = ["spesometro-api", "spesometro-core", "spesometro-db", "spesometro-web"]
+dependencies = [
+    "spesometro-api",
+    "spesometro-core",
+    "spesometro-db",
+    "spesometro-web",
+    "spesometro-eval",
+]
 
 [dependency-groups]
-dev = ["pytest==9.2.0", "ruff==0.17.6", "httpx2==2.16.2"]
+dev = ["pytest==9.2.0", "ruff==0.17.6", "httpx2==2.16.2", "jsonschema==4.26.0"]
 
 [tool.uv]
 package = false
 
 [tool.uv.workspace]
-members = ["apps/*", "packages/*"]
+members = ["apps/*", "packages/*", "eval"]
 
 [tool.uv.sources]
 spesometro-api = { workspace = true }
 spesometro-core = { workspace = true }
 spesometro-db = { workspace = true }
+spesometro-eval = { workspace = true }
 spesometro-web = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["apps", "packages"]
+testpaths = ["apps", "packages", "eval"]
 addopts = "--import-mode=importlib -m 'not integration'"
 markers = ["integration: richiede un Postgres usa e getta in Docker (fuori dal default e dalla CI)"]
 
