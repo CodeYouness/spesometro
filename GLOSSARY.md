@@ -134,6 +134,22 @@ _Avoid_: confusione con lo `stato` di un `Job`
 Tabella delle quantità minime di dati sotto cui una previsione (consumo/fabbisogno, prezzo "davvero conveniente", ritorno promozione) non viene data come affidabile e si mostra il ripiego con badge di confidenza.
 _Avoid_: soglie di matching (quelle decidono auto-accetta/revisione, non le previsioni)
 
+### Valutazione
+
+**Golden set**:
+Insieme congelato di annotazioni fatte a mano (scontrini e pagine di volantino), con versione e data, contro cui si misura l'estrazione; va annotato prima di implementarla.
+_Avoid_: dataset di test, ground truth
+
+**Offerta corretta**:
+Offerta estratta che corrisponde a un'offerta annotata della stessa pagina per prodotto e `prezzo_confezione` identico al centesimo; è il criterio che decide il gate di precision. Il criterio severo richiede in più tutti gli altri campi uguali ed è solo informativo.
+
+**Tasso di cifre errate**:
+Quota dei campi numerici di uno scontrino (prezzi, quantità, sconti, totale) il cui valore estratto è diverso dall'annotazione, contando anche le righe mancanti e quelle inventate.
+
+**Sconto di scontrino**:
+Sconto stampato sullo scontrino che non appartiene a una riga (buono, coupon sul totale); distinto dallo sconto di riga, che sta sulla `ReceiptLine`.
+_Avoid_: coupon come riga
+
 ### Esecuzione
 
 **`Job`**:
