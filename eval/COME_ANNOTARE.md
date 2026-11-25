@@ -20,10 +20,10 @@ data/                   le immagini: fuori da git
 
 ```sh
 uv run spesometro-eval scheletro scontrini/a.jpg                    # scontrino
-uv run spesometro-eval scheletro volantini/lidl/p01.webp --tipo pagina   # pagina di volantino
+uv run spesometro-eval scheletro raw/volantini/lidl/2026-11-01_2026-12-31_abc/page_001.webp --tipo pagina   # pagina di volantino
 ```
 
-Il comando scrive il file vuoto in `eval/golden/scontrini/` o `eval/golden/volantini/` (nome = nome dell'immagine, estensione `.json`) e non sovrascrive un file esistente. Per una pagina calcola anche lo `sha256`, dall'immagine in `data/` o, se manca, da `manifest.json`. Poi si completa a mano. Opzioni: `--golden` e `--data` per cambiare le cartelle.
+Il percorso dell'immagine è quello dentro `data/`; va bene anche copiato con `data/` davanti (o assoluto), il comando lo riporta dentro `data/`. Il comando scrive il file vuoto in `eval/golden/scontrini/` o `eval/golden/volantini/` e non sovrascrive un file esistente. Nome del file: per uno scontrino il nome dell'immagine (`a.json`); per una pagina catena, cartella del volantino e pagina (`lidl_2026-11-01_2026-12-31_abc_page_001.json`), perché `page_001.webp` c'è in ogni volantino. Per una pagina calcola anche lo `sha256`, dall'immagine in `data/` o, se manca, da `manifest.json`. Poi si completa a mano. Opzioni: `--golden` e `--data` per cambiare le cartelle.
 
 ## Esempio: scontrino
 

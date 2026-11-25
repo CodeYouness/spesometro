@@ -208,11 +208,49 @@ def test_scheletro_di_pagina_accettato_dal_loader(cartelle: Cartelle) -> None:
     )
 
     assert codice == 0
-    creato = cartelle.golden / "volantini" / "page_001.json"
+    creato = cartelle.golden / "volantini" / "lidl_2026-11-01_2026-12-31_abc_page_001.json"
     dati = json.loads(creato.read_text())
     assert dati["immagine"] == IMMAGINE
     assert dati["sha256"] == SHA
     assert main(["valida", "--golden", str(cartelle.golden), "--data", str(cartelle.data)]) == 0
+
+
+def test_scheletri_della_stessa_pagina_di_due_volantini_non_collidono(cartelle: Cartelle) -> None:
+    altra = "raw/volantini/coop/2026-09-24_2026-10-21_coop-1/page_001.webp"
+    for immagine in (IMMAGINE, altra):
+        percorso = cartelle.data / immagine
+        percorso.parent.mkdir(parents=True, exist_ok=True)
+        percorso.write_bytes(BYTES)
+
+        codice = main(
+            ["scheletro", immagine, "--tipo", "pagina", "--golden", str(cartelle.golden)]
+            + ["--data", str(cartelle.data)]
+        )
+
+        assert codice == 0
+    creati = sorted(p.name for p in (cartelle.golden / "volantini").glob("*.json"))
+    assert creati == [
+        "coop_2026-09-24_2026-10-21_coop-1_page_001.json",
+        "lidl_2026-11-01_2026-12-31_abc_page_001.json",
+    ]
+
+
+@pytest.mark.parametrize("forma", ["relativa", "assoluta"])
+def test_scheletro_accetta_il_percorso_con_la_cartella_data(
+    cartelle: Cartelle, monkeypatch: pytest.MonkeyPatch, forma: str
+) -> None:
+    cartelle.immagine()
+    monkeypatch.chdir(cartelle.data.parent)
+    immagine = f"data/{IMMAGINE}" if forma == "relativa" else str(cartelle.data / IMMAGINE)
+
+    codice = main(
+        ["scheletro", immagine, "--tipo", "pagina", "--golden", str(cartelle.golden)]
+        + ["--data", str(cartelle.data)]
+    )
+
+    assert codice == 0
+    (creato,) = (cartelle.golden / "volantini").glob("*.json")
+    assert json.loads(creato.read_text())["immagine"] == IMMAGINE
 
 
 def test_scheletro_di_pagina_senza_immagine_ne_manifest_fallisce(

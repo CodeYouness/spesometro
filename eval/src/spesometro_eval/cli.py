@@ -32,7 +32,9 @@ def _parser() -> argparse.ArgumentParser:
     scheletro = sub.add_parser(
         "scheletro", help="crea l'annotazione vuota di uno scontrino o pagina"
     )
-    scheletro.add_argument("immagine", help="percorso relativo dentro data/, es. scontrini/a.jpg")
+    scheletro.add_argument(
+        "immagine", help="percorso dentro data/ (es. scontrini/a.jpg) o che inizia con data/"
+    )
     scheletro.add_argument("--tipo", choices=["scontrino", "pagina"], default="scontrino")
     scheletro.add_argument("--golden", type=Path, default=GOLDEN)
     scheletro.add_argument("--data", type=Path, default=DATA, help="serve per lo sha256 di pagina")
@@ -55,16 +57,34 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _dentro_data(immagine: str, data: Path) -> str:
+    """Accetta anche `data/raw/...` o un percorso assoluto: restituisce il percorso dentro data/."""
+    percorso = Path(immagine)
+    try:
+        return (Path.cwd() / percorso).resolve().relative_to(data.resolve()).as_posix()
+    except ValueError:
+        return immagine
+
+
+def _nome_scheletro(immagine: str, pagina: bool) -> str:
+    """Le pagine hanno nomi ripetuti (`page_005.webp` in ogni volantino): catena e cartella
+    del volantino entrano nel nome del file."""
+    senza_estensione = Path(immagine).with_suffix("")
+    parti = senza_estensione.parts[-3:] if pagina else (senza_estensione.name,)
+    return "_".join(parti) + ".json"
+
+
 def _scheletro(args: argparse.Namespace) -> int:
     pagina = args.tipo == "pagina"
+    immagine = _dentro_data(args.immagine, args.data)
     cartella = CARTELLA_VOLANTINI if pagina else CARTELLA_SCONTRINI
-    destinazione = args.golden / cartella / f"{Path(args.immagine).stem}.json"
+    destinazione = args.golden / cartella / _nome_scheletro(immagine, pagina)
     if destinazione.exists():
         raise ErroreGolden(f"{destinazione}: esiste già, non la sovrascrivo")
     testo = (
-        scheletro_pagina(args.immagine, sha256_pagina(args.data, args.immagine))
+        scheletro_pagina(immagine, sha256_pagina(args.data, immagine))
         if pagina
-        else scheletro_annotazione(args.immagine)
+        else scheletro_annotazione(immagine)
     )
     destinazione.parent.mkdir(parents=True, exist_ok=True)
     destinazione.write_text(testo)
