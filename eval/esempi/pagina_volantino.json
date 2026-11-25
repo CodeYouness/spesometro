@@ -1,0 +1,40 @@
+{
+  "immagine": "esempio/pagina_sintetica.webp",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "contenuto": {
+    "offerte": [
+      {
+        "testo_grezzo": "Latte UHT parzialmente scremato 1 L",
+        "prezzo_confezione": "1.09",
+        "condizione": "nessuna",
+        "marca": "Esempio",
+        "confezione_quantita": "1",
+        "confezione_unita": "L",
+        "prezzo_unitario": "1.09",
+        "unita": "L",
+        "prezzo_barrato": "1.29",
+        "sconto_dichiarato": null,
+        "validita_da": "2026-11-02",
+        "validita_a": "2026-11-08",
+        "quantita_minima": null,
+        "limite_pezzi": 6
+      },
+      {
+        "testo_grezzo": "Pasta di semola 500 g, con carta fedeltà, 3 pezzi",
+        "prezzo_confezione": "0.79",
+        "condizione": "multi_acquisto",
+        "marca": null,
+        "confezione_quantita": "0.5",
+        "confezione_unita": "kg",
+        "prezzo_unitario": null,
+        "unita": null,
+        "prezzo_barrato": null,
+        "sconto_dichiarato": "20",
+        "validita_da": null,
+        "validita_a": null,
+        "quantita_minima": 3,
+        "limite_pezzi": null
+      }
+    ]
+  }
+}

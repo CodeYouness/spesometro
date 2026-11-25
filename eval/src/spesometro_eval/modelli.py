@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
-from spesometro_core import Scontrino
+from spesometro_core import PaginaVolantino, Scontrino
 
 
 class _Formato(BaseModel):
@@ -26,6 +26,25 @@ class AnnotazioneScontrino(_Formato):
 
 class PredizioneScontrino(AnnotazioneScontrino):
     """Un'annotazione più modello, versione del prompt, costo e tempo."""
+
+    modello: str = Field(min_length=1)
+    versione_prompt: str = Field(min_length=1)
+    costo_usd: Decimal | None = None
+    tempo_s: float | None = None
+
+
+class AnnotazionePagina(_Formato):
+    """Una pagina di volantino annotata per intero (ADR 0015)."""
+
+    immagine: str = Field(min_length=1)
+    """Percorso relativo dentro `data/`."""
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    """Impronta della pagina, confrontata con `manifest.json` quando i dati sono presenti."""
+    contenuto: PaginaVolantino
+
+
+class PredizionePagina(AnnotazionePagina):
+    """Un'annotazione di pagina più modello, versione del prompt, costo e tempo."""
 
     modello: str = Field(min_length=1)
     versione_prompt: str = Field(min_length=1)
