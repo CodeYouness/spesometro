@@ -10,7 +10,7 @@ Allineato alla SPEC v1.4 (9/11). Ordine di dipendenza: 01 → 02, 03, 05, 06 →
 |----|-------------------------------------------------------------|-------|-----------------|----------------|
 | 01 | Scaffold monorepo e deploy "hello" su Railway EU            | 4 h   | fatto (19/11)   | —              |
 | 02 | Schema dati v1.4 (gruppi, `Flyer`, provenienza), Alembic    | 3,5 h | fatto (19/11)   | 01             |
-| 03 | Login lato server con Supabase Auth in NiceGUI              | 1,5 h | ready-for-agent | 01             |
+| 03 | Login lato server con Supabase Auth in NiceGUI              | 1,5 h | fatto (25/11)   | 01             |
 | 05 | Minimizzazione: ridimensionamento e redazione del JSON      | 1 h   | ready-for-agent | 01             |
 | 06 | Schemi di estrazione, formato del golden set e scorer       | 1,5 h | fatto (25/11)   | 01             |
 | 07 | Annotazione del golden set S1                               | 3 h   | ready-for-human | 06             |
