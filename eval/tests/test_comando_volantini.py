@@ -236,3 +236,30 @@ def test_esempio_sintetico_di_pagina_valido(tmp_path: Path) -> None:
 
     assert main(["valida", "--golden", str(base), "--data", str(tmp_path / "data")]) == 0
     PaginaVolantino.model_validate(json.loads(esempio.read_text())["contenuto"])
+
+
+def test_pagina_annotata_senza_predizione_conta_come_vuota_e_il_report_lo_dice(
+    cartelle: Cartelle,
+) -> None:
+    seconda = f"{CARTELLA}/page_002.webp"
+    cartelle.annotazione([LATTE])
+    cartelle.annotazione([LATTE], nome="p2", immagine=seconda)
+    cartelle.predizione([LATTE])
+
+    assert main(cartelle.argomenti("report")) == 0
+
+    testo = cartelle.report()
+    assert "Pagine valutate: 1 su 2." in testo
+    assert "senza predizione contano come estrazione vuota" in testo
+    assert "| Totale | 1 | 2 | 100,0% | 50,0% | 100,0% | 50,0% |" in testo
+    assert f"| {seconda} | 0 | 1 | n/d | 0,0% | n/d | 0,0% |" in testo
+
+
+def test_report_spiega_che_il_severo_confronta_anche_il_testo_grezzo(cartelle: Cartelle) -> None:
+    cartelle.annotazione([LATTE])
+    cartelle.predizione([LATTE])
+
+    assert main(cartelle.argomenti("report")) == 0
+
+    testo = cartelle.report()
+    assert "`testo_grezzo` carattere per carattere" in testo

@@ -1,6 +1,8 @@
 import tomllib
 from pathlib import Path
 
+# Pydantic è l'unica dipendenza ammessa (SPEC, Moduli): gli schemi di dominio (scontrino, volantino)
+# sono modelli Pydantic condivisi da app, worker ed eval; web e DB restano fuori da `core`.
 AMMESSE = {"pydantic"}
 
 

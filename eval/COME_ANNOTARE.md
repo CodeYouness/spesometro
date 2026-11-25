@@ -124,7 +124,7 @@ Controlla la testata e valida ogni file; se un file è sbagliato il messaggio no
 uv run spesometro-eval report --predizioni <cartella> [--soglia 0.6] [--out eval/reports]
 ```
 
-Legge il golden set e le predizioni salvate in `<cartella>` (stessa forma delle annotazioni, più modello, versione del prompt, costo e tempo), scrive `report-golden-<versione>-<data>.md` e ne stampa il percorso. Non chiama nessun modello. Il report riporta versione e data del golden set, criteri e soglia di somiglianza; per le pagine mostra precision e recall con il criterio che decide il gate (prodotto e `prezzo_confezione` identico al centesimo, ADR 0015) accanto al criterio severo (tutti i campi uguali).
+Legge il golden set e le predizioni salvate in `<cartella>` (stessa forma delle annotazioni, più modello, versione del prompt, costo e tempo), scrive `report-golden-<versione>-<data>.md` e ne stampa il percorso. Non chiama nessun modello. Il report riporta versione e data del golden set, criteri e soglia di somiglianza; per le pagine mostra precision e recall con il criterio che decide il gate (prodotto e `prezzo_confezione` identico al centesimo, ADR 0015) accanto al criterio severo (accoppiamento massimo a parte, solo coppie con tutti i campi uguali, `testo_grezzo` carattere per carattere compreso). Una pagina o uno scontrino annotato senza predizione per un modello conta come estrazione vuota: pesa su recall, accuratezza e cifre errate, e il report dice «valutate n su m». Negli scontrini un refuso nel testo di una riga la conta come mancante più inventata.
 
 Gli avvisi compaiono su stderr e in fondo al report, sezione "Avvisi":
 

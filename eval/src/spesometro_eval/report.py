@@ -11,6 +11,7 @@ from spesometro_eval.modelli import (
     PredizioneScontrino,
 )
 from spesometro_eval.scorer import (
+    SOGLIA_GATE_PRECISION,
     SOGLIA_SOMIGLIANZA,
     ConteggiOfferte,
     MetricheScontrini,
@@ -18,8 +19,10 @@ from spesometro_eval.scorer import (
     valuta_volantini,
 )
 
-SOGLIA_GATE_PRECISION = 0.7
-"""Gate di S1 (SPEC §3.2): precision delle offerte, criterio del gate, almeno 70%."""
+REGOLA_SENZA_PREDIZIONE = (
+    "Le annotazioni senza predizione contano come estrazione vuota: offerte, righe e campi "
+    "numerici annotati risultano mancanti, quindi pesano su recall, accuratezza e cifre errate."
+)
 
 
 def percentuale(valore: float | None) -> str:
@@ -40,14 +43,18 @@ def costruisci_report(
 ) -> str:
     scontrini = {a.immagine: a for _, a in golden.scontrini}
     pagine = {a.immagine: a for _, a in golden.pagine}
-    gruppi_s: dict[tuple[str, str], list[PredizioneScontrino]] = defaultdict(list)
-    for _, p in predizioni.scontrini:
-        if p.immagine in scontrini:
-            gruppi_s[(p.modello, p.versione_prompt)].append(p)
-    gruppi_p: dict[tuple[str, str], list[PredizionePagina]] = defaultdict(list)
-    for _, q in predizioni.pagine:
-        if q.immagine in pagine:
-            gruppi_p[(q.modello, q.versione_prompt)].append(q)
+    per_gruppo_scontrini: dict[tuple[str, str], list[PredizioneScontrino]] = defaultdict(list)
+    for _, predizione in predizioni.scontrini:
+        if predizione.immagine in scontrini:
+            per_gruppo_scontrini[(predizione.modello, predizione.versione_prompt)].append(
+                predizione
+            )
+    per_gruppo_pagine: dict[tuple[str, str], list[PredizionePagina]] = defaultdict(list)
+    for _, predizione_pagina in predizioni.pagine:
+        if predizione_pagina.immagine in pagine:
+            per_gruppo_pagine[
+                (predizione_pagina.modello, predizione_pagina.versione_prompt)
+            ].append(predizione_pagina)
 
     righe = [
         "# Report eval: scontrini e volantini",
@@ -55,14 +62,14 @@ def costruisci_report(
         f"Golden set: versione {golden.testata.versione}, data {golden.testata.data.isoformat()}.",
         f"Scontrini annotati: {len(scontrini)}. Pagine di volantino annotate: {len(pagine)}.",
     ]
-    for chiave in sorted(gruppi_s.keys() | gruppi_p.keys()):
-        modello, prompt = chiave
+    for gruppo in sorted(per_gruppo_scontrini.keys() | per_gruppo_pagine.keys()):
+        modello, prompt = gruppo
         righe += ["", f"## {modello} (prompt {prompt})"]
-        if chiave in gruppi_s:
-            righe += _sezione_scontrini(gruppi_s[chiave], scontrini)
-        if chiave in gruppi_p:
-            righe += _sezione_volantini(gruppi_p[chiave], pagine, soglia)
-    if not gruppi_s and not gruppi_p:
+        if gruppo in per_gruppo_scontrini:
+            righe += _sezione_scontrini(per_gruppo_scontrini[gruppo], scontrini)
+        if gruppo in per_gruppo_pagine:
+            righe += _sezione_volantini(per_gruppo_pagine[gruppo], pagine, soglia)
+    if not per_gruppo_scontrini and not per_gruppo_pagine:
         righe += ["", "Nessuna predizione corrispondente a un'annotazione."]
     if avvisi:
         righe += ["", "## Avvisi", "", *[f"- {a}" for a in avvisi]]
@@ -83,14 +90,21 @@ def _costo_e_tempo(gruppo: list[PredizioneScontrino] | list[PredizionePagina]) -
 def _sezione_scontrini(
     gruppo: list[PredizioneScontrino], annotati: dict[str, AnnotazioneScontrino]
 ) -> list[str]:
+    predetti = {p.immagine: p.contenuto for p in gruppo}
     metriche: MetricheScontrini = valuta_scontrini(
-        [(annotati[p.immagine].contenuto, p.contenuto) for p in gruppo]
+        [(a.contenuto, predetti.get(immagine)) for immagine, a in annotati.items()]
     )
     righe = [
         "",
         "### Scontrini",
         "",
-        f"Scontrini valutati: {metriche.n_scontrini} su {len(annotati)}.",
+        f"Scontrini valutati: {len(predetti)} su {len(annotati)}.",
+        REGOLA_SENZA_PREDIZIONE,
+        "",
+        "Criteri: un valore conta se è identico all'annotazione. Le righe si allineano per "
+        "sequenza sul testo normalizzato (maiuscole, spazi e punteggiatura non contano), ma "
+        "`testo_grezzo` si confronta carattere per carattere: un refuso nel testo di una riga "
+        "la fa contare come mancante più inventata.",
         "",
         "| Metrica | Valore |",
         "|---|---|",
@@ -100,47 +114,46 @@ def _sezione_scontrini(
     return righe + _costo_e_tempo(gruppo)
 
 
-def _riga_offerte(nome: str, c: ConteggiOfferte) -> str:
+def _riga_offerte(nome: str, conteggi: ConteggiOfferte) -> str:
     return (
-        f"| {nome} | {c.estratte} | {c.annotate} | {percentuale(c.precision_gate)} "
-        f"| {percentuale(c.recall_gate)} | {percentuale(c.precision_severo)} "
-        f"| {percentuale(c.recall_severo)} |"
+        f"| {nome} | {conteggi.estratte} | {conteggi.annotate} "
+        f"| {percentuale(conteggi.precision_gate)} | {percentuale(conteggi.recall_gate)} "
+        f"| {percentuale(conteggi.precision_severo)} | {percentuale(conteggi.recall_severo)} |"
     )
 
 
 def _sezione_volantini(
     gruppo: list[PredizionePagina], annotate: dict[str, AnnotazionePagina], soglia: float
 ) -> list[str]:
-    m = valuta_volantini(
-        [(p.immagine, annotate[p.immagine].contenuto, p.contenuto) for p in gruppo], soglia
+    predette = {p.immagine: p.contenuto for p in gruppo}
+    metriche = valuta_volantini(
+        [(immagine, a.contenuto, predette.get(immagine)) for immagine, a in annotate.items()],
+        soglia,
     )
-    esito = (
-        "n/d"
-        if m.totale.precision_gate is None
-        else "superato"
-        if m.totale.precision_gate >= SOGLIA_GATE_PRECISION
-        else "non superato"
-    )
+    esito = {None: "n/d", True: "superato", False: "non superato"}[metriche.totale.esito_gate]
     righe = [
         "",
         "### Offerte dei volantini",
         "",
-        f"Pagine valutate: {len(gruppo)} su {len(annotate)}.",
+        f"Pagine valutate: {len(predette)} su {len(annotate)}.",
+        REGOLA_SENZA_PREDIZIONE,
         "",
         "Criteri (ADR 0015). **Gate**: nella stessa pagina, un'offerta estratta è corretta se si "
         "accoppia uno a uno con un'annotata per `prezzo_confezione` identico al centesimo e "
         f"nome normalizzato simile (soglia di somiglianza {_numero(soglia)}). "
-        "**Severo**, solo informativo: la coppia del gate vale solo se tutti i campi coincidono.",
+        "**Severo**, solo informativo: un accoppiamento uno a uno massimo, calcolato a parte, "
+        "sulle sole coppie del gate con tutti i campi uguali; confronta anche `testo_grezzo` "
+        "carattere per carattere.",
         "",
-        f"Gate di S1 (precision gate ≥ 70%): {esito}.",
+        f"Gate di S1 (precision gate ≥ {_numero(SOGLIA_GATE_PRECISION * 100)}%): {esito}.",
         "",
         "| Livello | Estratte | Annotate | Precision (gate) | Recall (gate) "
         "| Precision (severo) | Recall (severo) |",
         "|---|---|---|---|---|---|---|",
-        _riga_offerte("Totale", m.totale),
+        _riga_offerte("Totale", metriche.totale),
     ]
-    righe += [_riga_offerte(nome, c) for nome, c in m.per_volantino]
-    righe += [_riga_offerte(nome, c) for nome, c in m.per_pagina]
+    righe += [_riga_offerte(nome, c) for nome, c in metriche.per_volantino]
+    righe += [_riga_offerte(nome, c) for nome, c in metriche.per_pagina]
     costo_e_tempo = _costo_e_tempo(gruppo)
     if costo_e_tempo:
         righe += ["", "| Metrica | Valore |", "|---|---|", *costo_e_tempo]

@@ -267,3 +267,33 @@ def test_esempio_sintetico_torna_con_il_totale() -> None:
     esempio = json.loads((Path(__file__).parents[1] / "esempi" / "scontrino.json").read_text())
 
     assert discrepanza_somma_totale(Scontrino.model_validate(esempio["contenuto"])) == 0
+
+
+def test_scontrino_annotato_senza_predizione_conta_come_vuoto_e_il_report_lo_dice(
+    cartelle: Cartelle,
+) -> None:
+    cartelle.testata()
+    cartelle.annotazione("s1")
+    cartelle.annotazione("s2")
+    cartelle.predizione("s1")
+
+    assert main(cartelle.argomenti("report")) == 0
+
+    testo = cartelle.report()
+    assert "Scontrini valutati: 1 su 2." in testo
+    assert "senza predizione contano come estrazione vuota" in testo
+    assert "| Accuratezza `catena` | 50,0% |" in testo
+    # Numerici per scontrino: totale + 3 della riga = 4; sbagliati i 4 dello scontrino mancante.
+    assert "| Tasso di cifre errate | 50,0% |" in testo
+
+
+def test_report_spiega_il_criterio_severo_degli_scontrini(cartelle: Cartelle) -> None:
+    cartelle.testata()
+    cartelle.annotazione()
+    cartelle.predizione()
+
+    assert main(cartelle.argomenti("report")) == 0
+
+    testo = cartelle.report()
+    assert "refuso" in testo
+    assert "mancante più inventata" in testo
