@@ -27,3 +27,9 @@ Primi due ticket; gli altri si generano dalla SPEC v1.4 §9. Gate: fetta vertica
 |----|-------------------------------------------------------------|-------|-----------------|----------------|
 | 10 | Salvataggio scontrino: upload → `Job` → DB con deduplica    | 3 h   | ready-for-agent | 02, 03, 08     |
 | 04 | Backup settimanale ridotto su Cloudflare R2                 | 1 h   | ready-for-agent | 02             |
+
+## Facoltativi
+
+Fuori calendario: si fanno solo se avanza tempo, senza deploy (SPEC §3.2, colonne extra dell'eval).
+
+- **Colonna LlamaExtract nell'eval** (valutato il 25/11). Servizio ospitato di LlamaIndex: accetta gli schemi del ticket 06 come JSON Schema e restituisce confidenza e citazione per campo. Piano gratuito: 10.000 crediti al mese, circa 400 pagine con estrazione in modalità Agentic. Solo eval, mai produzione: il modello dietro al servizio non è dichiarato né pinnabile (ADR 0002, ADR 0012). Secondo uso: terza prova sul gate dei volantini (ticket 09) se la precision resta sotto il 70% anche con OCR 4.1, prima dell'inserimento assistito. Condizioni: regione UE (`api.cloud.eu.llamaindex.ai`), cache spenta, client su `httpx` e non `httpx2`. Da verificare prima: supporto WEBP (i volantini raccolti sono in WEBP), limiti e prezzi sul sito.
