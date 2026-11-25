@@ -69,6 +69,16 @@ async def test_servizio_non_disponibile_ha_un_messaggio_diverso(user: User) -> N
     await user.should_not_see("Email o password non corrette")
 
 
+async def test_troppi_tentativi_hanno_un_messaggio_proprio(user: User) -> None:
+    await user.open("/login")
+
+    await _entra(user, "bloccato")
+
+    await user.should_see("Riprova più tardi")
+    await user.should_not_see("Email o password non corrette")
+    await user.should_not_see("Servizio di accesso non disponibile")
+
+
 async def test_dopo_il_login_si_torna_alla_pagina_richiesta(user: User) -> None:
     await user.open("/altra?x=1")
 

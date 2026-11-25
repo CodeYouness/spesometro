@@ -7,19 +7,27 @@ from nicegui import app, ui
 from starlette.responses import RedirectResponse
 
 from spesometro_web.accesso import Orologio
-from spesometro_web.esiti import CredenzialiErrate, Esito, Riuscito, ServizioNonDisponibile
+from spesometro_web.esiti import (
+    CredenzialiErrate,
+    Esito,
+    Riuscito,
+    ServizioNonDisponibile,
+    TroppiTentativi,
+)
 from spesometro_web.sessione import CHIAVE_EMAIL, apri_sessione, sessione_presente
 
 type FunzioneAccesso = Callable[[str, str, str], Awaitable[Esito]]
 
 HOME = "/"
 
-# Punto dei messaggi di esito: il ticket 03 aggiunge qui `TroppiTentativi`.
 MESSAGGIO_CREDENZIALI_ERRATE = "Email o password non corrette."
 MESSAGGIO_SERVIZIO_NON_DISPONIBILE = "Servizio di accesso non disponibile. Riprova tra poco."
+MESSAGGIO_TROPPI_TENTATIVI = "Troppi tentativi di accesso. Riprova più tardi."
 
 
-def messaggio_per(esito: CredenzialiErrate | ServizioNonDisponibile) -> str:
+def messaggio_per(esito: CredenzialiErrate | ServizioNonDisponibile | TroppiTentativi) -> str:
+    if isinstance(esito, TroppiTentativi):
+        return MESSAGGIO_TROPPI_TENTATIVI
     if isinstance(esito, ServizioNonDisponibile):
         return MESSAGGIO_SERVIZIO_NON_DISPONIBILE
     return MESSAGGIO_CREDENZIALI_ERRATE
