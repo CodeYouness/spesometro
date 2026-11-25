@@ -4,6 +4,12 @@ Assistente per la spesa alimentare: da scontrini e volantini di Lidl, Eurospin e
 
 ## Linguaggio
 
+### Utenti
+
+**`User`**:
+Profilo di una persona ammessa all'app, con le sue preferenze; ha lo stesso identificativo dell'account con cui la persona si autentica. Chi ha un account ma non un `User` non entra.
+_Avoid_: account (è la credenziale, non il profilo), registrazione (non esiste: i `User` si creano a mano)
+
 ### Catalogo
 
 **`ProductGroup`**:
