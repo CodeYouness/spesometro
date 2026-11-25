@@ -138,7 +138,7 @@ async def test_sessione_di_oltre_30_giorni_rimanda_al_login_e_viene_svuotata(use
     await user.should_see(marker="accedi")
     with user:
         assert dict(app.storage.user) == {}
-    await user.find(marker="email").type("a@b.it")
+    user.find(marker="email").type("a@b.it")
     user.find(marker="password").type("giusta")
     user.find(marker="accedi").click()
     await user.should_see(marker="pagina-altra")
